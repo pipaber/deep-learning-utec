@@ -1,0 +1,32 @@
+[project]
+name = "deep-learning-utec"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.11.1",
+    "pandas>=3.0.5",
+    "pyyaml>=6.0.2",
+    "scikit-learn>=1.9.0",
+    "torch==2.11.0",
+    "umap-learn>=0.5.12",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "jupyterlab>=4.6.3",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.ty.environment]
+python = ".venv"
+
+[tool.pyright]
+extraPaths = ["."]

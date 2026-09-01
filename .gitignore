@@ -1,0 +1,40 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+build/
+dist/
+wheels/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Virtual environments and local configuration
+.venv/
+.env
+.env.*
+!.env.example
+
+# Data and archives
+test/
+train/
+*.7z
+*.csv
+
+# Model artifacts and experiment output
+*.pt
+*.pth
+*.ckpt
+runs/
+
+# Local reference documents
+*.pdf
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
