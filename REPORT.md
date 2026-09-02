@@ -169,7 +169,7 @@ La implementación:
 2. Genera candidatos con `GroupShuffleSplit`.
 3. Descarta candidatos que dejarían sin positivos de entrenamiento a una clase
    globalmente soportada.
-4. Penaliza candidatos sin soporte de validación cuando la clase aparece en al
+4. Descarta candidatos sin soporte de validación cuando la clase aparece en al
    menos dos grabaciones independientes.
 5. Verifica que ningún grupo aparezca en ambos conjuntos.
 6. Reporta clases globalmente vacías, restringidas a una grabación o ausentes
@@ -195,7 +195,51 @@ Configuración principal:
 - Sin early stopping por defecto, como en el paper; permanece disponible como
   opción explícita.
 
-No se ha iniciado todavía el entrenamiento completo.
+### Registro completo de decisiones de adaptación
+
+La siguiente tabla diferencia explícitamente los parámetros originales de las
+adaptaciones utilizadas. Las decisiones no listadas como cambio conservan la
+propuesta del paper.
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Componente | Paper | Implementación | Justificación |
+|------------|-------|----------------|---------------|
+| Número de tareas | 5 eventos marinos | 42 especies | Es el espacio de etiquetas requerido por el laboratorio. |
+| Canales CNN por rama | 64 | 4 | NDDR crece aproximadamente con `K²C²`. Con 42 tareas, 64 canales elevarían mucho los parámetros, activaciones y tiempo. Se conserva toda la topología NDDR con un ancho entrenable. |
+| Unidades por BiGRU | 128 | 16 | Hay 126 BiGRU específicas, frente a 15 en el paper. La reducción limita memoria y tiempo manteniendo tres capas bidireccionales por tarea. |
+| Inicialización cruzada NDDR | 0.1 para cada una de 4 tareas ajenas | `0.4 / 41 = 0.009756` para cada tarea ajena | Mantiene 0.6 para la tarea propia y una suma total inicial de 1.0. Copiar 0.1 en 41 entradas produciría una suma de 4.7 y cambiaría la escala de activaciones. |
+| Inicialización skip | 0.2, 0.2 y 0.6 | Igual | Se conserva la prioridad de las características más recientes. |
+| Kernel y pooling CNN | `5×5`; `(5,1)`, `(4,1)`, `(2,1)` | Igual | Componente estructural central de la CRNN del paper. |
+| Bloques CNN y BiGRU | 3 CNN y 3 BiGRU | Igual | Se conserva la profundidad propuesta. |
+| Entrada espectral | MS-PCEN, 96 kHz, FFT 2048, hop 512 | MS-PCEN, 22.05 kHz, FFT 512, hop 128 | El dataset fija 22.05 kHz. La reducción conserva una ventana de aproximadamente 23 ms y el solapamiento de 75 %. |
+| Frames STFT | 559 | 513 | Consecuencia de adaptar FFT/hop a 22.05 kHz y usar STFT sin padding central. |
+| Canales de entrada | MS-PCEN repetido 3 veces | Igual | Se conserva la formulación del paper, aunque las copias se generan en memoria y no se almacenan. |
+| Batch size | 16 | 64 | La RTX A2000 usa aproximadamente 5.84 GiB con batch 64. El batch mayor reduce una época de 6216 a 777 pasos y mejora sustancialmente el tiempo sin cambiar el modelo. |
+| Épocas | 100 | 100 | Se conserva el presupuesto del paper. |
+| Early stopping | No | No | Se conserva la decisión del paper por la presencia potencial de mínimos locales múltiples. |
+| Optimizador | Adam | Adam | Se conserva el optimizador propuesto. |
+| Learning rate | 0.001 | 0.001 | Se conserva la tasa inicial. |
+| Decaimiento | `0.75` staircase cada 90 pasos | `0.75` staircase cada media época, aproximadamente 388 pasos con batch 64 | En el paper, 90 pasos equivalen aproximadamente a media época. Usar 90 literalmente sobre 777 pasos por época reduciría el LR unas 8 veces por época y lo llevaría casi a cero prematuramente. Se conserva la cadencia relativa al dataset. |
+| Pérdida | BCE | `BCEWithLogitsLoss` | Es la combinación numéricamente estable de sigmoid y BCE para 42 logits independientes. |
+| Balance de pérdida | Dataset curado; BCE sin pesos | `pos_weight = negativos / positivos`, limitado a `[1,20]` | El dataset amazónico está fuertemente desbalanceado y no fue curado como el del paper. El límite evita gradientes extremos en especies muy raras. |
+| Clases sin positivos | No aplica al dataset curado | `SCIFUS` y `SCINAS` se mantienen con peso 1 | Se debe conservar el formato de 42 salidas, aunque no pueden aprenderse supervisadamente. Se excluyen de mAP y promedios macro que requieren positivos. |
+| Regularización NDDR | L2 de 0.01 en pesos `1×1` | Igual | Se conserva la regularización específica del método. |
+| Regularización restante | No indicada | Weight decay `1e-4` | Regularización moderada para un dataset desbalanceado; queda separada del L2 de 0.01 de NDDR. |
+| Gradient clipping | No indicado | Norma máxima 5.0 | Reduce el riesgo de explosión de gradientes en las 126 capas recurrentes. |
+| Precisión numérica | No indicada | AMP en CUDA | Reduce memoria y acelera convoluciones/GRU. No altera capas, logits ni función objetivo; los pesos maestros permanecen en float32. |
+| Split | 4 folds balanceados | Un split 80/20, semilla 42 | Es el protocolo solicitado por el profesor. Se agrupa por grabación para impedir fuga entre ventanas solapadas. |
+| Selección del split | Dataset curado | 4096 candidatos group-aware | Permite aproximar prevalencias y exigir soporte en train/validación cuando existen al menos dos grabaciones positivas. |
+| Selección de checkpoint | Entrenamiento fijo por fold | Mejor mAP de validación más `last.pt` | Conserva un modelo útil para inferencia y permite reanudar interrupciones; se reporta que la validación también participa en selección. |
+| Umbral principal | 0.5 | 0.5 | Se conserva para comparabilidad. Los umbrales optimizados se reportan aparte y se estiman solo en validación. |
+| Backend CUDA | No relevante | PyTorch CUDA 12.6 | CUDA 12.8 presentó incompatibilidad cuBLASLt con la workstation; 12.6 coincide con el sistema instalado y pasó forward/backward cuDNN. |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+El preset compacto tiene 500,682 parámetros. Esta cifra no implica equivalencia
+de capacidad con los modelos de cinco tareas del paper: se usa como compromiso
+computacional y debe juzgarse mediante los resultados de validación y la
+ablación.
 
 ## 8. Ablación
 
