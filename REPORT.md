@@ -185,7 +185,7 @@ Configuración principal:
   El intervalo se escala con los pasos por época para conservar la cadencia
   relativa de 90 pasos sobre ~182 pasos/época usada en el paper; también puede
   fijarse literalmente con `training.lr_decay_steps`.
-- Batch inicial de 8, ajustable a la GPU remota.
+- Batch 64, seleccionado mediante benchmark en la RTX A2000 de 12 GB.
 - AMP en CUDA.
 - Gradient clipping de 5.0.
 - L2 de 0.01 sobre los pesos `1×1` de NDDR.

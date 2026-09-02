@@ -50,7 +50,7 @@ uv sync --frozen
 uv run animal-audio --help
 ```
 
-PyTorch está configurado con el índice CUDA 12.8 en `pyproject.toml`.
+PyTorch está configurado con el índice CUDA 12.6 en `pyproject.toml`, compatible con la workstation usada para los experimentos.
 
 ## Preparar los datos
 
