@@ -11,6 +11,7 @@ from typing import Any
 from .config import ConfigError, load_config
 from .engine import (
     EngineError,
+    benchmark_training_step,
     evaluate_checkpoint,
     extract_configured_archives,
     inspect_model,
@@ -80,6 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run one tiny eval-mode model forward pass",
     )
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark",
+        help="Measure one forward/backward pass without updating weights",
+    )
+    _add_config_argument(benchmark_parser)
+    _add_device_argument(benchmark_parser)
 
     train_parser = subparsers.add_parser(
         "train",
@@ -156,6 +164,9 @@ def _run_command(args: argparse.Namespace) -> dict[str, Any]:
             device=args.device,
             dry_forward=args.dry_forward,
         )
+
+    if args.command == "benchmark":
+        return benchmark_training_step(config, device=args.device)
 
     if args.command == "train":
         summary = train_experiment(config, device=args.device)

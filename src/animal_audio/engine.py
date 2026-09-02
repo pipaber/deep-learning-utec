@@ -1654,6 +1654,86 @@ def predict_test(
     )
 
 
+def benchmark_training_step(
+    config: ConfigLike,
+    *,
+    device: DeviceLike = "auto",
+) -> dict[str, Any]:
+    """Measure one real forward/backward pass without updating model weights."""
+
+    import time
+
+    resolved = _resolved_config(config)
+    seed_everything(resolved.training.seed)
+    prepared = prepare_split(resolved)
+    dataset = AnimalAudioDataset(
+        prepared.train_metadata.iloc[: resolved.training.batch_size],
+        resolved.data.train_dir,
+        labels=prepared.labels,
+        sample_rate=resolved.feature.sample_rate,
+        duration_seconds=resolved.feature.duration_seconds,
+    )
+    loader = _make_loader(
+        dataset,
+        batch_size=resolved.training.batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=resolved.training.pin_memory,
+        seed=resolved.training.seed,
+    )
+    batch = next(iter(loader))
+    model, feature_extractor, resolved_device = build_experiment_components(
+        resolved, device
+    )
+    model.train()
+    targets = cast(torch.Tensor, batch["target"]).to(resolved_device)
+    waveforms = cast(torch.Tensor, batch["waveform"])
+    use_amp = _amp_enabled(resolved_device, resolved.training.amp)
+    if resolved_device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(resolved_device)
+        torch.cuda.synchronize(resolved_device)
+    started = time.perf_counter()
+    features = extract_fixed_features(feature_extractor, waveforms, resolved_device)
+    if resolved_device.type == "cuda":
+        torch.cuda.synchronize(resolved_device)
+    frontend_done = time.perf_counter()
+    with torch.autocast(
+        device_type=resolved_device.type,
+        dtype=torch.float16,
+        enabled=use_amp,
+    ):
+        logits = model(features)
+        loss = nn.functional.binary_cross_entropy_with_logits(logits, targets)
+    if resolved_device.type == "cuda":
+        torch.cuda.synchronize(resolved_device)
+    forward_done = time.perf_counter()
+    loss.backward()
+    if resolved_device.type == "cuda":
+        torch.cuda.synchronize(resolved_device)
+    backward_done = time.perf_counter()
+    peak_memory = (
+        torch.cuda.max_memory_allocated(resolved_device) / (1024**2)
+        if resolved_device.type == "cuda"
+        else 0.0
+    )
+    return {
+        "updated_weights": False,
+        "device": str(resolved_device),
+        "batch_size": int(targets.shape[0]),
+        "feature_shape": list(features.shape),
+        "logit_shape": list(logits.shape),
+        "loss": float(loss.detach()),
+        "frontend_seconds": frontend_done - started,
+        "forward_seconds": forward_done - frontend_done,
+        "backward_seconds": backward_done - forward_done,
+        "total_seconds": backward_done - started,
+        "peak_memory_mib": peak_memory,
+        "training_batches_per_epoch": math.ceil(
+            len(prepared.train_metadata) / resolved.training.batch_size
+        ),
+    }
+
+
 def inspect_model(
     config: ConfigLike,
     *,
