@@ -1,0 +1,68 @@
+name: nddr_pcen
+output_dir: artifacts/experiments/nddr_pcen
+
+data:
+  train_dir: train
+  test_dir: test
+  metadata_csv: train.csv
+  split_csv: artifacts/split_seed42.csv
+  train_archive: train.7z
+  test_archive: test.7z
+
+feature:
+  sample_rate: 22050
+  duration_seconds: 3.0
+  n_fft: 512
+  win_length: 512
+  hop_length: 128
+  n_mels: 64
+  f_min: 0.0
+  f_max: null
+  kind: pcen
+  repeat_channels: 3
+  pcen_gain: 0.98
+  pcen_bias: 0.05
+  pcen_power: 0.5
+  pcen_eps: 0.0001
+  pcen_smoothing: 0.967
+
+model:
+  architecture: nddr_mtl
+  num_classes: 42
+  input_channels: 3
+  conv_channels: 4
+  conv_layers: 3
+  kernel_size: [5, 5]
+  pool_sizes: [[5, 1], [4, 1], [2, 1]]
+  conv_dropout: 0.25
+  gru_hidden_size: 16
+  gru_layers: 3
+  gru_dropout: 0.2
+  bidirectional: true
+  nddr_self_weight: 0.6
+  nddr_cross_weight: null
+  nddr_skip_weights: [0.2, 0.2, 0.6]
+
+training:
+  seed: 42
+  batch_size: 8
+  epochs: 100
+  learning_rate: 0.001
+  lr_decay: 0.75
+  lr_decay_steps: null
+  lr_decay_every_epochs: 0.5
+  use_pos_weight: true
+  pos_weight_min: 1.0
+  pos_weight_max: 20.0
+  amp: true
+  grad_clip_norm: 5.0
+  base_weight_decay: 0.0001
+  nddr_weight_decay: 0.01
+  num_workers: 8
+  pin_memory: true
+  save_checkpoints: true
+  checkpoint_filename: best.pt
+  checkpoint_every: 1
+  resume_from: null
+  early_stopping_patience: null
+  early_stopping_min_delta: 0.0001

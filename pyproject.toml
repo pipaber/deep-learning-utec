@@ -4,12 +4,23 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.11.1",
+    "numpy>=2.2.0",
     "pandas>=3.0.5",
     "pyyaml>=6.0.2",
     "scikit-learn>=1.9.0",
     "torch==2.11.0",
     "umap-learn>=0.5.12",
 ]
+
+[project.scripts]
+animal-audio = "animal_audio.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/animal_audio"]
 
 [dependency-groups]
 dev = [

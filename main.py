@@ -1,6 +1,7 @@
-def main():
-    print("Hello from deep-learning-utec!")
+"""Compatibility entry point for the animal-audio CLI."""
+
+from animal_audio.cli import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

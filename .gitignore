@@ -29,6 +29,7 @@ train/
 *.pth
 *.ckpt
 runs/
+artifacts/
 
 # Local reference documents
 *.pdf
