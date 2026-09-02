@@ -316,7 +316,7 @@ def create_group_aware_split(
     *,
     val_fraction: float = 0.2,
     seed: int = 42,
-    n_candidates: int = 256,
+    n_candidates: int = 4096,
     labels: Sequence[str] | None = None,
     filename_column: str = FILENAME_COLUMN,
     split_column: str = SPLIT_COLUMN,
@@ -385,6 +385,8 @@ def create_group_aware_split(
         val_counts = val_targets.sum(axis=0)
         if np.any(globally_supported & (train_counts == 0)):
             continue
+        if np.any(validation_support_possible & (val_counts == 0)):
+            continue
         train_prevalence = train_targets.mean(axis=0)
         val_prevalence = val_targets.mean(axis=0)
         prevalence_error = float(
@@ -398,11 +400,7 @@ def create_group_aware_split(
             )
         )
         size_error = abs((len(val_indices) / len(validated)) - val_fraction)
-        validation_support_misses = np.count_nonzero(
-            validation_support_possible & (val_counts == 0)
-        )
-        support_penalty = validation_support_misses / len(selected_labels)
-        score = prevalence_error + size_error + support_penalty
+        score = prevalence_error + size_error
         if score < best_score:
             best_score = score
             best_indices = (train_indices.copy(), val_indices.copy())
@@ -410,7 +408,8 @@ def create_group_aware_split(
     if best_indices is None:
         raise MetadataValidationError(
             "could not create a group split with training positives for every "
-            "globally supported class; increase n_candidates or review rare-class groups"
+            "globally supported class and validation positives for classes present "
+            "in at least two groups; increase n_candidates or review rare-class groups"
         )
 
     split_values = np.full(len(validated), TRAIN_SPLIT, dtype=object)
