@@ -1,0 +1,157 @@
+/*-- scss:defaults --*/
+$presentation-font-size-root: 30px;
+$presentation-heading-font-weight: 650;
+$presentation-line-height: 1.25;
+$presentation-block-margin: 14px;
+
+/*-- scss:rules --*/
+.reveal .slides {
+  text-align: left;
+}
+
+.reveal h1,
+.reveal h2,
+.reveal h3 {
+  letter-spacing: -0.02em;
+}
+
+.reveal h2 {
+  border-bottom: 2px solid var(--r-link-color);
+  padding-bottom: 0.18em;
+}
+
+.reveal p,
+.reveal li {
+  line-height: 1.3;
+}
+
+.reveal table {
+  font-size: 0.68em;
+  width: 100%;
+}
+
+.reveal table th {
+  font-weight: 700;
+}
+
+.reveal code {
+  font-size: 0.9em;
+}
+
+.reveal pre code {
+  max-height: 500px;
+}
+
+.reveal .mermaid svg {
+  display: block;
+  margin: 0 auto;
+  max-height: 480px;
+  max-width: 100%;
+}
+
+.reveal .compact {
+  font-size: 0.76em;
+}
+
+.reveal .small {
+  font-size: 0.68em;
+}
+
+.reveal .tiny {
+  font-size: 0.58em;
+}
+
+.reveal .dim {
+  font-family: var(--r-code-font);
+  font-weight: 650;
+  color: var(--r-link-color);
+}
+
+.reveal .key-message {
+  border-left: 6px solid var(--r-link-color);
+  padding: 0.45em 0.7em;
+  margin-top: 0.7em;
+  font-weight: 600;
+}
+
+.reveal .metric {
+  border: 2px solid var(--r-link-color);
+  border-radius: 0.35em;
+  padding: 0.45em;
+  text-align: center;
+}
+
+.reveal .metric strong {
+  display: block;
+  font-size: 1.35em;
+  color: var(--r-link-color);
+}
+
+.reveal .muted {
+  opacity: 0.72;
+}
+
+.reveal .warning {
+  border-left: 6px solid #d97706;
+  padding-left: 0.65em;
+}
+
+.reveal .auto-flow {
+  align-items: stretch;
+  display: flex;
+  gap: 0.45em;
+  justify-content: center;
+  margin: 1.1em auto;
+  width: 100%;
+}
+
+.reveal .flow-box {
+  align-items: center;
+  background: color-mix(in srgb, var(--r-link-color) 8%, transparent);
+  border: 2px solid var(--r-link-color);
+  border-radius: 0.4em;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  font-size: 0.74em;
+  justify-content: center;
+  max-width: 330px;
+  min-height: 125px;
+  padding: 0.4em;
+  text-align: center;
+}
+
+.reveal .flow-box p {
+  margin: 0.12em 0;
+}
+
+.reveal .flow-arrow {
+  align-self: center;
+  color: var(--r-link-color);
+  flex: 0 0 auto;
+  font-size: 1.2em;
+}
+
+.reveal .auto-flow.dense {
+  gap: 0.25em;
+  margin: 0.65em auto;
+}
+
+.reveal .auto-flow.dense .flow-box {
+  font-size: 0.58em;
+  min-height: 105px;
+  padding: 0.25em;
+}
+
+.reveal .auto-flow.dense .flow-arrow {
+  font-size: 0.9em;
+}
+
+.reveal .slide-number,
+.reveal .footer {
+  font-size: 0.55em;
+}
+
+.reveal .notes {
+  display: none;
+}

@@ -1,0 +1,627 @@
+---
+title: "Reconocimiento multietiqueta de animales"
+subtitle: "Implementación de NDDR-MTL en PyTorch"
+lang: es
+format:
+  revealjs:
+    theme: [default, presentation/styles.scss]
+    embed-resources: true
+    slide-number: c/t
+    progress: true
+    controls: true
+    transition: fade
+    background-transition: fade
+    center: false
+    width: 1280
+    height: 720
+    margin: 0.07
+    navigation-mode: linear
+    hash: true
+    code-overflow: wrap
+    footer: "NDDR-MTL · Deep Learning UTEC"
+---
+
+## Objetivo del laboratorio
+
+::: {.columns}
+::: {.column width="55%"}
+- Reconocer sonidos de animales en clips amazónicos.
+- Cada audio puede contener **cero, una o varias especies**.
+- La salida es un vector binario de 42 posiciones.
+- Implementamos la propuesta central **NDDR-MTL**.
+:::
+
+::: {.column width="45%"}
+<div class="metric">
+<strong>42</strong>
+especies
+</div>
+
+<div class="metric">
+<strong>3 s</strong>
+por clip
+</div>
+
+<div class="metric">
+<strong>22.05 kHz</strong>
+audio mono
+</div>
+:::
+:::
+
+::: {.key-message}
+No es clasificación multiclase: las etiquetas no son mutuamente excluyentes.
+:::
+
+::: {.notes}
+Empezar distinguiendo multiclase de multietiqueta. Un clip puede no contener
+ninguna especie o contener varias simultáneamente.
+:::
+
+## Datos y salida esperada
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 4
+flowchart LR
+    A["WAV mono · 66150 muestras"] --> B["Modelo NDDR-MTL"]
+    B --> C["42 logits"]
+    C --> D["42 probabilidades"]
+    D --> E["Vector multietiqueta"]
+```
+
+::: {.columns}
+::: {.column width="50%"}
+**Entrenamiento**
+
+- 62,191 clips etiquetados.
+- Split 80/20 con semilla 42.
+- 49,721 train y 12,470 validation.
+:::
+
+::: {.column width="50%"}
+**Test**
+
+- 31,187 clips sin etiquetas.
+- Una probabilidad y una decisión por especie.
+- Un vector de ceros representa “ninguna especie”.
+:::
+:::
+
+## ¿Por qué NDDR-MTL?
+
+::: {.columns}
+::: {.column width="49%"}
+**Dos extremos**
+
+- **BR:** una red completamente independiente por clase.
+- **CMLC:** una sola representación compartida por todas las clases.
+
+Ambos extremos pueden perder eficiencia o especialización.
+:::
+
+::: {.column width="51%"}
+**NDDR-MTL**
+
+- CNN y GRU específicas para cada especie.
+- Intercambio de información dentro de la red.
+- Fusión aprendible mediante convoluciones $1\times1$.
+- Conserva especialización y explota correlaciones entre especies.
+:::
+:::
+
+::: {.key-message}
+La propuesta central no es solo una CRNN: es el intercambio controlado entre
+rutas específicas mediante capas NDDR.
+:::
+
+## Representación del audio
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 3.7
+flowchart LR
+    A["WAV · B × 66150"] --> B["STFT · FFT 512, hop 128"]
+    B --> C["Banco Mel · 64 bandas"]
+    C --> D["PCEN"]
+    D --> E["3 canales · B × 3 × 64 × 513"]
+```
+
+La cantidad de frames es:
+
+$$
+T=\left\lfloor\frac{66150-512}{128}\right\rfloor+1=513.
+$$
+
+::: {.compact}
+PCEN estabiliza variaciones lentas de energía y realza eventos acústicos sobre
+ruido de fondo. La ablación reemplaza PCEN por log-Mel.
+:::
+
+## Arquitectura completa
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 5.4
+flowchart LR
+    A["PCEN input"] --> B["42 CNN 1 · 3→4"]
+    B --> C["NDDR 1 · 168→4"]
+    C --> D["42 CNN 2 · 4→4"]
+    D --> E["NDDR 2 · 168→4"]
+    E --> F["42 CNN 3 · 4→4"]
+    F --> G["NDDR 3 · 168→4"]
+    C -.-> H["Resize + skip fusion"]
+    E -.-> H
+    G -.-> H
+    H --> I["3 BiGRU por especie"]
+    I --> J["Temporal max pooling"]
+    J --> K["42 logits"]
+```
+
+::: {.key-message}
+42 rutas específicas, tres puntos de intercambio NDDR y shortcuts desde las
+tres profundidades convolucionales.
+:::
+
+## Bloque CNN específico por especie
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 3.2
+flowchart LR
+    A["Entrada de la rama"] --> B["Conv 5×5 · padding 2"]
+    B --> C["BatchNorm"]
+    C --> D["ReLU"]
+    D --> E["MaxPool 2D"]
+    E --> F["Dropout2d · 0.25"]
+```
+
+| Etapa | Canales | Pooling | Salida por especie |
+|---|---:|---:|---:|
+| CNN 1 | $3\to4$ | $(5,1)$ | $B\times4\times12\times513$ |
+| CNN 2 | $4\to4$ | $(4,1)$ | $B\times4\times3\times513$ |
+| CNN 3 | $4\to4$ | $(2,1)$ | $B\times4\times1\times513$ |
+
+::: {.compact}
+Los pesos de las 42 ramas son independientes. Una grouped convolution solo las
+ejecuta juntas para aprovechar mejor la GPU.
+:::
+
+## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+
+::: {.muted}
+Paso 1 de 3 · Reunir las representaciones específicas
+:::
+
+::: {.auto-flow}
+::: {.flow-box data-id="nddr-features"}
+**42 feature maps**
+
+Cada uno: $B\times4\times F\times T$
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-concat"}
+**Concatenar canales**
+
+$B\times168\times F\times T$
+:::
+:::
+
+Cada rama aporta cuatro canales discriminativos. La concatenación reúne la
+información de las 42 especies sin mezclarla todavía.
+
+## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+
+::: {.muted}
+Paso 2 de 3 · Estabilizar la representación conjunta
+:::
+
+::: {.auto-flow}
+::: {.flow-box data-id="nddr-features"}
+**42 feature maps**
+
+Cada uno: $B\times4\times F\times T$
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-concat"}
+**Concatenar canales**
+
+$B\times168\times F\times T$
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-bn"}
+**BatchNorm**
+
+168 canales
+:::
+:::
+
+BN normaliza cada canal concatenado antes de que las tareas intercambien
+información.
+
+## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+
+::: {.muted}
+Paso 3 de 3 · Fusionar y recuperar una salida por especie
+:::
+
+::: {.auto-flow .dense}
+::: {.flow-box data-id="nddr-features"}
+**42 mapas**
+
+$4$ canales cada uno
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-concat"}
+**Concat**
+
+$42\times4=168$
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-bn"}
+**BatchNorm**
+
+168 canales
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-projection"}
+**42 Conv $1\times1$**
+
+Cada una $168\to4$
+:::
+
+::: {.flow-arrow}
+$\longrightarrow$
+:::
+
+::: {.flow-box data-id="nddr-output"}
+**42 salidas**
+
+$4$ canales cada una
+:::
+:::
+
+$$
+\mathbf{Y}_k=\operatorname{Conv}^{(k)}_{1\times1}
+\left(\operatorname{BN}\left(
+\operatorname{Concat}(\mathbf{X}_1,\ldots,\mathbf{X}_{42})
+\right)\right).
+$$
+
+::: {.key-message}
+Cada Conv $1\times1$ aprende cómo fusionar todas las especies para reconstruir
+la representación de una tarea concreta, sin cambiar frecuencia ni tiempo.
+:::
+
+## Inicialización diagonal NDDR
+
+Para tres tareas con dos canales, la proyección de la tarea A comienza como:
+
+$$
+\mathbf{W}_A=
+\left[
+0.6\mathbf{I}_2\mid0.2\mathbf{I}_2\mid0.2\mathbf{I}_2
+\right]
+=
+\begin{bmatrix}
+0.6&0&0.2&0&0.2&0\\
+0&0.6&0&0.2&0&0.2
+\end{bmatrix}.
+$$
+
+Para las 42 especies:
+
+$$
+w_{\mathrm{cross}}=
+\frac{1-0.6}{42-1}=\frac{0.4}{41}\approx0.009756.
+$$
+
+::: {.columns .compact}
+::: {.column width="50%"}
+- Peso propio inicial: $0.6$.
+- Peso total externo: $0.4$.
+:::
+::: {.column width="50%"}
+- Solo es el punto inicial.
+- Adam puede aprender cualquier conexión.
+:::
+:::
+
+## Shortcuts entre capas NDDR
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 4.5
+flowchart TD
+    A["NDDR 1 · B × 4 × 12 × 513"] --> D["Bilinear · frecuencia 12→1"]
+    B["NDDR 2 · B × 4 × 3 × 513"] --> E["Bilinear · frecuencia 3→1"]
+    C["NDDR 3 · B × 4 × 1 × 513"] --> F["Sin resize"]
+    D --> G["Concat por especie · B × 12 × 1 × 513"]
+    E --> G
+    F --> G
+    G --> H["BN + Conv 1×1 · 12→4"]
+```
+
+Inicialización de la fusión:
+
+$$
+\mathbf{W}^{\mathrm{skip}}_k=
+\left[0.2\mathbf{I}_4\mid0.2\mathbf{I}_4\mid0.6\mathbf{I}_4\right].
+$$
+
+Se enfatiza la información reciente sin descartar características tempranas.
+
+## Bloques recurrentes y salida
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 4
+flowchart LR
+    A["B × 4 × 1 × 513"] --> B["Flatten por frame · B × 513 × 4"]
+    B --> C["BiGRU 1 · 16 por dirección"]
+    C --> D["BiGRU 2 · 16 por dirección"]
+    D --> E["BiGRU 3 · 16 por dirección"]
+    E --> F["Max temporal · B × 16"]
+    F --> G["Linear 16→1"]
+```
+
+- Dropout de entrada $0.2$ antes de cada BiGRU.
+- Las dos direcciones se promedian: $32\to16$ características.
+- Cada especie tiene sus tres GRU y su clasificador.
+- Los 42 logits se apilan en un tensor $B\times42$.
+
+::: {.key-message}
+`BCEWithLogitsLoss` incorpora sigmoid durante entrenamiento; en inferencia se
+aplica `torch.sigmoid` para obtener probabilidades.
+:::
+
+## Adaptaciones del paper
+
+::: {.smaller}
+| Componente | Paper | Implementación | Motivo |
+|---|---:|---:|---|
+| Número de tareas | 5 | 42 | Especies requeridas |
+| Canales CNN | 64 | 4 | NDDR crece con $K^2C^2$ |
+| GRU por dirección | 128 | 16 | 126 BiGRU específicas |
+| Inicialización externa | 0.1 | $0.4/41$ | Preservar suma inicial 1 |
+| Batch size | 16 | 64 | Aprovechar RTX A2000 |
+| Sample rate | 96 kHz | 22.05 kHz | Dataset del laboratorio |
+| FFT / hop | 2048 / 512 | 512 / 128 | Misma escala temporal aproximada |
+:::
+
+::: {.key-message}
+Conservamos la topología NDDR-MTL; reducimos su ancho para hacer viable el salto
+de 5 a 42 rutas específicas.
+:::
+
+## Split sin fuga de información
+
+Los clips son ventanas solapadas de grabaciones más largas:
+
+```text
+recording_0_3.wav  ───────
+recording_1_4.wav    ───────
+                       2 s compartidos
+```
+
+Una división aleatoria por clip filtraría audio casi idéntico a validación.
+
+```{mermaid}
+%%| fig-width: 10
+%%| fig-height: 2.8
+flowchart LR
+    A["Obtener grabación original"] --> B["GroupShuffleSplit · 4096 candidatos"]
+    B --> C["Verificar soporte por especie"]
+    C --> D["Train 80% · 49721 clips"]
+    C --> E["Validation 20% · 12470 clips"]
+```
+
+**Semilla:** 42 · Ninguna grabación original aparece en ambos conjuntos.
+
+## Configuración de entrenamiento
+
+::: {.columns}
+::: {.column width="50%"}
+- **GPU:** NVIDIA RTX A2000, 12 GB.
+- **Framework:** PyTorch 2.11, CUDA 12.6.
+- **Optimizador:** Adam.
+- **Batch:** 64.
+- **Épocas:** 100, sin early stopping.
+- **AMP:** float16 en CUDA.
+:::
+
+::: {.column width="50%"}
+- **Pérdida:** BCE ponderada.
+- **Gradient clipping:** 5.0.
+- **Weight decay base:** $10^{-4}$.
+- **Weight decay NDDR:** $10^{-2}$.
+- **Checkpoints:** mejor mAP y última época.
+- **Parámetros:** 500,682.
+:::
+:::
+
+Scheduler exponencial staircase:
+
+$$
+\operatorname{lr}(s)=0.001(0.75)^{\left\lfloor s/388\right\rfloor}.
+$$
+
+777 pasos por época; decay cada 388 pasos, aproximadamente media época.
+
+## Resultados preliminares
+
+::: {.warning}
+El entrenamiento principal continúa. Estos valores corresponden al corte del
+epoch 26 y deben reemplazarse por la evaluación final de `best.pt`.
+:::
+
+::: {.columns}
+::: {.column width="33%"}
+<div class="metric">
+<strong>0.50585</strong>
+mejor validation mAP
+</div>
+:::
+::: {.column width="33%"}
+<div class="metric">
+<strong>16</strong>
+mejor epoch observado
+</div>
+:::
+::: {.column width="33%"}
+<div class="metric">
+<strong>0.25860</strong>
+validation loss en ese epoch
+</div>
+:::
+:::
+
+- Último corte: epoch 26, mAP $0.50440$.
+- El mAP se estabilizó alrededor de $0.50$.
+- `best.pt` y `last.pt` se guardan en cada época.
+
+## Ablación: PCEN frente a log-Mel
+
+Se mantendrá constante:
+
+- Arquitectura NDDR-MTL y número de parámetros.
+- Split, semilla, optimizador y número de épocas.
+- Batch size y scheduler.
+
+Solo cambia la representación de entrada:
+
+| Experimento | Entrada | Configuración | Estado |
+|---|---|---|---|
+| Principal | PCEN | `configs/nddr_pcen.yaml` | Entrenando |
+| Ablación | log-Mel | `configs/nddr_logmel.yaml` | Pendiente |
+
+**Comparación final:** mAP, micro/macro F1, exact match, curvas PR y AP por
+especie.
+
+## Análisis de errores previsto
+
+::: {.columns}
+::: {.column width="50%"}
+**Por especie**
+
+- Ranking de falsos positivos.
+- Ranking de falsos negativos.
+- Prevalencia frente a AP.
+- Clases sin soporte positivo.
+:::
+
+::: {.column width="50%"}
+**Por complejidad del clip**
+
+- Ninguna especie.
+- Una especie.
+- Dos especies.
+- Tres o más especies.
+- Combinaciones multietiqueta frecuentes.
+:::
+:::
+
+Se mostrarán espectrogramas de errores representativos para relacionar las
+predicciones con ruido, solapamiento y baja energía.
+
+## Conclusiones
+
+1. NDDR-MTL mantiene rutas CNN y GRU específicas para cada especie.
+2. Las convoluciones $1\times1$ permiten intercambio aprendido entre las 42
+   rutas.
+3. Los shortcuts integran características de las tres profundidades NDDR.
+4. La salida y la pérdida se adaptaron a 42 etiquetas independientes.
+5. La reducción a 4 canales CNN y 16 unidades GRU hace entrenable la propuesta
+   sin eliminar sus componentes centrales.
+
+::: {.key-message}
+El aporte implementado es la estructura NDDR-MTL completa, no una CRNN genérica.
+:::
+
+## Trabajo restante
+
+- Completar los 100 epochs del experimento PCEN.
+- Evaluar el mejor checkpoint con umbrales de validación.
+- Entrenar la ablación log-Mel.
+- Generar gráficos, predicciones de test y análisis de errores.
+- Sustituir esta diapositiva y los resultados preliminares por valores finales.
+
+::: {.notes}
+Esta diapositiva no debe aparecer en la entrega final. Sirve como checklist
+mientras los experimentos continúan.
+:::
+
+## Apéndice: dimensiones completas {.smaller}
+
+| Etapa | Forma por especie | Forma concatenada |
+|---|---:|---:|
+| Frontend PCEN | — | $B\times3\times64\times513$ |
+| CNN / NDDR 1 | $B\times4\times12\times513$ | $B\times168\times12\times513$ |
+| CNN / NDDR 2 | $B\times4\times3\times513$ | $B\times168\times3\times513$ |
+| CNN / NDDR 3 | $B\times4\times1\times513$ | $B\times168\times1\times513$ |
+| Resize | $3\times(B\times4\times1\times513)$ | — |
+| Concat skip | $B\times12\times1\times513$ | — |
+| Fusión skip | $B\times4\times1\times513$ | — |
+| Secuencia GRU | $B\times513\times4$ | — |
+| Cada BiGRU | $B\times513\times16$ | 42 rutas |
+| Temporal max pool | $B\times16$ | — |
+| Clasificador | $B\times1$ | $B\times42$ |
+
+## Apéndice: pérdida multietiqueta
+
+Para logits $z_{ik}$, targets $y_{ik}$ y pesos positivos $p_k$:
+
+$$
+\mathcal{L}=-\frac{1}{BK}\sum_{i=1}^{B}\sum_{k=1}^{K}
+\left[p_ky_{ik}\log\sigma(z_{ik})+
+(1-y_{ik})\log(1-\sigma(z_{ik}))\right].
+$$
+
+$$
+p_k=\operatorname{clip}\left(
+\frac{N_{k,\mathrm{neg}}}{N_{k,\mathrm{pos}}},1,20\right).
+$$
+
+- Las 42 salidas son independientes.
+- Una clase sin positivos recibe $p_k=1$.
+- `SCIFUS` y `SCINAS` no tienen positivos en entrenamiento.
+
+## Apéndice: código de la implementación
+
+| Componente | Archivo y símbolo |
+|---|---|
+| Bloque CNN | `src/animal_audio/model.py::_CNNBlock` |
+| Capa NDDR | `src/animal_audio/model.py::_NDDRLayer` |
+| Ramas CNN | `NDDRMTL.cnn_branches` |
+| Shortcuts | `NDDRMTL._initialize_skip_fusion` |
+| BiGRU y TMP | `NDDRMTL.forward` |
+| BCE y Adam | `src/animal_audio/engine.py::train_experiment` |
+| PCEN / log-Mel | `src/animal_audio/features.py::AudioFeatureExtractor` |
+| Configuración | `configs/nddr_pcen.yaml` |
+
+Código, reporte y presentación se ejecutan desde el mismo repositorio para
+mantener trazabilidad entre arquitectura, hiperparámetros y resultados.

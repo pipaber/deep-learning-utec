@@ -1,4 +1,13 @@
-# Implementación de NDDR-MTL para reconocimiento de animales
+---
+title: "Implementación de NDDR-MTL para reconocimiento de animales"
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+    smooth-scroll: true
+---
 
 ## 1. Método seleccionado
 
@@ -7,54 +16,164 @@ Reduction Multi-Task Learning (NDDR-MTL)**. NDDR-MTL mantiene una ruta de
 características específica para cada tarea y permite intercambio controlado de
 información entre las rutas mediante convoluciones `1×1` aprendibles.
 
-Para cada etapa convolucional, las características de las `K` tareas se
-concatenan:
+Para cada etapa convolucional, las características de las $K$ tareas se
+concatenan en la dimensión de canales:
 
-```text
-X = concat(X_1, X_2, ..., X_K)
-```
+$$
+\mathbf{X}=\operatorname{Concat}\left(\mathbf{X}_1,\mathbf{X}_2,\ldots,
+\mathbf{X}_K;\ \mathrm{canales}\right).
+$$
 
-Cada tarea obtiene una nueva representación:
+Cada tarea $k$ obtiene una representación propia mediante BN y una convolución
+`1×1` aprendible:
 
-```text
-Y_k = Conv1x1_k(BatchNorm(X))
-```
+$$
+\mathbf{Y}_k=\operatorname{Conv}^{(k)}_{1\times1}
+\left(\operatorname{BN}(\mathbf{X})\right).
+$$
 
-La inicialización favorece la propia tarea y asigna pesos menores a las demás.
-Esto permite especialización por especie sin eliminar las correlaciones entre
-especies que aparecen simultáneamente.
+Si cada rama contiene $C$ canales, la inicialización de esa proyección puede
+escribirse por bloques como:
 
-## 2. Pipeline implementado
+$$
+\mathbf{W}_k=
+\left[\alpha_{k1}\mathbf{I}_C\mid\alpha_{k2}\mathbf{I}_C\mid\cdots\mid
+\alpha_{kK}\mathbf{I}_C\right],
+\qquad
+\alpha_{kj}=
+\begin{cases}
+0.6, & j=k,\\
+\dfrac{0.4}{K-1}, & j\ne k.
+\end{cases}
+$$
 
-```mermaid
+Así se favorece la propia tarea sin eliminar el intercambio con especies que
+aparecen simultáneamente. Para construir el shortcut de la tarea $k$, primero
+se redimensionan las tres salidas NDDR a la resolución de la tercera etapa:
+
+$$
+\widetilde{\mathbf{Y}}_k^{(s)}=
+\operatorname{Resize}_{\mathrm{bilinear}}
+\left(\mathbf{Y}_k^{(s)},\operatorname{shape}(\mathbf{Y}_k^{(3)})\right),
+\qquad s\in\{1,2,3\}.
+$$
+
+Luego se concatenan y se reducen de $3C$ a $C$ canales mediante otra
+convolución `1×1`:
+
+$$
+\mathbf{Z}_k=\operatorname{Conv}^{(k)}_{1\times1}
+\left(\operatorname{BN}\left(
+\operatorname{Concat}(\widetilde{\mathbf{Y}}_k^{(1)},
+\widetilde{\mathbf{Y}}_k^{(2)},
+\widetilde{\mathbf{Y}}_k^{(3)})\right)\right),
+$$
+
+inicializada con:
+
+$$
+\mathbf{W}^{\mathrm{skip}}_k=
+\left[0.2\mathbf{I}_C\mid0.2\mathbf{I}_C\mid0.6\mathbf{I}_C\right].
+$$
+
+## 2. Arquitectura y pipeline implementado
+
+El siguiente diagrama muestra el `forward` real del modelo. `B` representa el
+tamaño del batch; los tensores espectrales siguen el orden `[B, canales,
+frecuencia, tiempo]`. Aunque las convoluciones se ejecutan de forma agrupada
+para aprovechar la GPU, las 42 ramas conservan parámetros independientes.
+
+<!-- markdownlint-disable MD013 MD060 -->
+
+```{mermaid}
 flowchart TD
-    A[WAV mono de 3 s] --> B[STFT y 64 bandas Mel]
-    B --> C[PCEN]
-    C --> D[42 ramas CNN específicas]
-    D --> E[NDDR etapa 1]
-    E --> F[NDDR etapa 2]
-    F --> G[NDDR etapa 3]
-    E --> H[Resize y skip fusion]
-    F --> H
-    G --> H
-    H --> I[3 BiGRU por especie]
-    I --> J[Temporal max pooling]
-    J --> K[42 logits multietiqueta]
+    A["WAV mono: 3 s, 22.05 kHz, 66150 muestras"] --> B["STFT: FFT 512, hop 128, 513 frames"]
+    B --> C["64 bandas Mel y PCEN, repetido en 3 canales"]
+    C --> D["Entrada: B × 3 × 64 × 513"]
+    D --> E["42 ramas específicas; una ruta CNN por especie"]
+
+    E --> C1["CNN 1 por especie: Conv 5×5, 3→4, padding 2; BN, ReLU, MaxPool 5×1, Dropout2d 0.25"]
+    C1 --> C1O["42 salidas: cada una B × 4 × 12 × 513"]
+    C1O --> N1C["NDDR 1: concatenación en canales, B × 168 × 12 × 513; BN"]
+    N1C --> N1["42 Conv 1×1 específicas, 168→4; init propia 0.6 y ajenas 0.4/41"]
+
+    N1 --> C2["CNN 2 por especie: Conv 5×5, 4→4, padding 2; BN, ReLU, MaxPool 4×1, Dropout2d 0.25"]
+    C2 --> C2O["42 salidas: cada una B × 4 × 3 × 513"]
+    C2O --> N2C["NDDR 2: concatenación en canales, B × 168 × 3 × 513; BN"]
+    N2C --> N2["42 Conv 1×1 específicas, 168→4; misma inicialización diagonal"]
+
+    N2 --> C3["CNN 3 por especie: Conv 5×5, 4→4, padding 2; BN, ReLU, MaxPool 2×1, Dropout2d 0.25"]
+    C3 --> C3O["42 salidas: cada una B × 4 × 1 × 513"]
+    C3O --> N3C["NDDR 3: concatenación en canales, B × 168 × 1 × 513; BN"]
+    N3C --> N3["42 Conv 1×1 específicas, 168→4; misma inicialización diagonal"]
+
+    N1 -. "Bilinear: frecuencia 12→1" .-> S
+    N2 -. "Bilinear: frecuencia 3→1" .-> S
+    N3 -. "Ya tiene frecuencia 1" .-> S
+    S["Shortcut por especie: concatenar NDDR 1, 2 y 3; B × 12 × 1 × 513"]
+    S --> SF["BN y Conv 1×1 específica 12→4; init por etapas 0.2, 0.2, 0.6"]
+    SF --> R["Time-distributed flatten: B × 513 × 4"]
+    R --> G1["BiGRU 1 específica: 16 por dirección, dropout entrada 0.2; promedio → B × 513 × 16"]
+    G1 --> G2["BiGRU 2 específica: 16 por dirección, dropout entrada 0.2; promedio"]
+    G2 --> G3["BiGRU 3 específica: 16 por dirección, dropout entrada 0.2; promedio"]
+    G3 --> T["Temporal max pooling sobre 513 frames: B × 16"]
+    T --> L["Linear específica 16→1 para cada especie"]
+    L --> O["Apilar 42 logits independientes: B × 42"]
+    O --> P["Sigmoid en inferencia; BCEWithLogitsLoss en entrenamiento"]
 ```
 
-Cada bloque CNN utiliza:
+Cada bloque CNN ejecuta, en este orden:
 
-1. Convolución `5×5` con padding.
-2. Batch normalization.
+1. Convolución `5×5` con zero-padding de 2.
+2. Batch normalization específica de la rama.
 3. ReLU.
 4. Max pooling no solapado.
-5. Dropout 0.25.
-6. Fusión NDDR con convoluciones `1×1`.
+5. `Dropout2d` con tasa 0.25.
+6. Concatenación de las 42 ramas, otro BN y fusión NDDR mediante convoluciones
+   `1×1` específicas de cada tarea.
 
 Después de la tercera etapa, las salidas de las tres capas NDDR se redimensionan
 a la resolución de la última etapa y se fusionan con pesos iniciales
-`[0.2, 0.2, 0.6]`. Cada especie tiene tres capas GRU bidireccionales. Las dos
-direcciones se promedian, se aplica temporal max pooling y se produce un logit.
+`[0.2, 0.2, 0.6]`. Esta es una inicialización aprendible de la convolución
+`1×1`: prioriza la última representación, pero Adam puede modificar todos sus
+pesos. Cada especie termina con tres BiGRU propias. Las dos direcciones se
+promedian después de cada GRU, se aplica temporal max pooling y se produce un
+logit.
+
+### Dimensiones durante el `forward`
+
+Para una entrada de tres segundos, las formas del modelo configurado con 42
+tareas, 4 canales CNN y 16 unidades GRU por dirección son:
+
+| Etapa | Operación principal | Forma por especie | Forma conjunta o concatenada |
+|-------|---------------------|------------------:|-----------------------------:|
+| Audio | Clip mono a 22.05 kHz | `B × 66150` | — |
+| Frontend | STFT, Mel, PCEN y repetición de canales | — | `B × 3 × 64 × 513` |
+| CNN 1 | Conv `5×5`, BN, ReLU, pool `(5,1)`, dropout | `B × 4 × 12 × 513` | 42 ramas independientes |
+| Entrada NDDR 1 | Concatenar ramas en canales y BN | — | `B × 168 × 12 × 513` |
+| Salida NDDR 1 | 42 proyecciones `1×1`, cada una `168→4` | `B × 4 × 12 × 513` | 42 salidas específicas |
+| CNN 2 | Conv `5×5`, BN, ReLU, pool `(4,1)`, dropout | `B × 4 × 3 × 513` | 42 ramas independientes |
+| Entrada NDDR 2 | Concatenar ramas en canales y BN | — | `B × 168 × 3 × 513` |
+| Salida NDDR 2 | 42 proyecciones `1×1`, cada una `168→4` | `B × 4 × 3 × 513` | 42 salidas específicas |
+| CNN 3 | Conv `5×5`, BN, ReLU, pool `(2,1)`, dropout | `B × 4 × 1 × 513` | 42 ramas independientes |
+| Entrada NDDR 3 | Concatenar ramas en canales y BN | — | `B × 168 × 1 × 513` |
+| Salida NDDR 3 | 42 proyecciones `1×1`, cada una `168→4` | `B × 4 × 1 × 513` | 42 salidas específicas |
+| Resize de shortcuts | Interpolar NDDR 1 y 2 al tamaño de NDDR 3 | Tres tensores `B × 4 × 1 × 513` | — |
+| Concatenación skip | Concatenar las tres profundidades y aplicar BN | `B × 12 × 1 × 513` | 42 shortcuts específicos |
+| Fusión skip | Conv `1×1`, `12→4`, inicializada `[0.2,0.2,0.6]` | `B × 4 × 1 × 513` | 42 salidas específicas |
+| Secuencia | Permutar y aplanar canales/frecuencia por frame | `B × 513 × 4` | — |
+| BiGRU 1 | 16 unidades por dirección y promedio | `B × 513 × 16` | 42 rutas recurrentes |
+| BiGRU 2 | 16 unidades por dirección y promedio | `B × 513 × 16` | 42 rutas recurrentes |
+| BiGRU 3 | 16 unidades por dirección y promedio | `B × 513 × 16` | 42 rutas recurrentes |
+| TMP | Máximo sobre los 513 frames | `B × 16` | — |
+| Clasificador | Capa lineal específica `16→1` | `B × 1` | 42 clasificadores |
+| Salida | Apilar logits de todas las especies | — | `B × 42` |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+La longitud temporal permanece en 513 porque todos los max poolings tienen
+segunda componente igual a uno. Solo se reduce la frecuencia:
+`64 → 12 → 3 → 1`.
 
 ## 3. Representación del audio
 
@@ -77,6 +196,17 @@ duración física de la ventana del paper:
 | Bandas Mel              |     64 |         64 |
 | Frames para 3 s         |    559 |        513 |
 
+Como la STFT se calcula sin padding central, la cantidad de frames temporales
+es:
+
+$$
+T=\left\lfloor\frac{N-L}{H}\right\rfloor+1
+=\left\lfloor\frac{66150-512}{128}\right\rfloor+1
+=513,
+$$
+
+donde $N$ es el número de muestras, $L$ la longitud de ventana y $H$ el hop.
+
 Parámetros PCEN:
 
 - `offset = 0.05`
@@ -85,17 +215,21 @@ Parámetros PCEN:
 - `eps = 1e-4`
 - `smoothing = 0.967`
 
-El suavizado se interpreta como:
+El suavizado temporal de la energía $E_t$ se calcula como:
 
-```text
-M_t = 0.967 M_(t-1) + 0.033 E_t
-```
+$$
+M_t=0.967M_{t-1}+(1-0.967)E_t
+=0.967M_{t-1}+0.033E_t.
+$$
 
-Y PCEN como:
+La transformación PCEN implementada es:
 
-```text
-PCEN(E) = (E / (eps + M)^gain + offset)^power - offset^power
-```
+$$
+\operatorname{PCEN}(E_t)=
+\left(\frac{E_t}{(\varepsilon+M_t)^{g}}+\delta\right)^r-\delta^r,
+$$
+
+con $g=0.98$, $\delta=0.05$, $r=0.5$ y $\varepsilon=10^{-4}$.
 
 El frontend fue implementado en PyTorch, incluyendo el banco triangular Mel.
 
@@ -128,9 +262,10 @@ inicial de 4.7.
 Para 42 tareas se mantiene 0.6 en la ruta propia y se distribuye 0.4 entre las
 41 rutas restantes:
 
-```text
-cross_weight = (1 - 0.6) / 41 = 0.009756...
-```
+$$
+w_{\mathrm{cross}}=\frac{1-0.6}{42-1}
+=\frac{0.4}{41}\approx0.009756.
+$$
 
 Este cambio preserva la prioridad de la tarea y la escala total de la
 inicialización original. El valor sigue siendo configurable.
@@ -140,15 +275,26 @@ inicialización original. El valor sigue siendo configurable.
 La salida tiene 42 logits independientes. Un vector de ceros representa que no
 se detectó ninguna especie; no se añadió una clase artificial de ruido.
 
-La pérdida es:
+Se utiliza `BCEWithLogitsLoss`, que combina sigmoid y entropía cruzada binaria
+de forma numéricamente estable. Para un batch de $B$ clips y $K=42$ especies,
+la pérdida ponderada es:
 
-```text
-BCEWithLogitsLoss
-```
+$$
+\mathcal{L}=-\frac{1}{BK}\sum_{i=1}^{B}\sum_{k=1}^{K}
+\left[p_k y_{ik}\log\sigma(z_{ik})+
+(1-y_{ik})\log\left(1-\sigma(z_{ik})\right)\right],
+$$
 
-Se ofrece BCE sin pesos y BCE con `pos_weight = negativos / positivos`, limitado
-a `[1, 20]`. El experimento principal usa pesos porque el dataset entregado no
-fue curado/balanceado como el dataset experimental del paper.
+con pesos positivos calculados únicamente sobre entrenamiento:
+
+$$
+p_k=\operatorname{clip}\left(
+\frac{N_{k,\mathrm{neg}}}{N_{k,\mathrm{pos}}},1,20\right).
+$$
+
+El experimento principal usa estos pesos porque el dataset entregado está
+fuertemente desbalanceado. Cuando una clase no tiene positivos se asigna
+$p_k=1$ para evitar una división indefinida.
 
 Dos columnas, `SCIFUS` y `SCINAS`, no tienen ejemplos positivos en
 `train.csv`. Se mantienen para conservar las 42 salidas, reciben peso 1.0 y se
@@ -178,22 +324,63 @@ La implementación:
 
 ## 7. Entrenamiento
 
-Configuración principal:
+### Parámetros de la ejecución principal
 
-- Adam, `lr = 1e-3`.
-- Decaimiento staircase de 0.75 cada media época aproximadamente.
-  El intervalo se escala con los pasos por época para conservar la cadencia
-  relativa de 90 pasos sobre ~182 pasos/época usada en el paper; también puede
-  fijarse literalmente con `training.lr_decay_steps`.
-- Batch 64, seleccionado mediante benchmark en la RTX A2000 de 12 GB.
-- AMP en CUDA.
-- Gradient clipping de 5.0.
-- L2 de 0.01 sobre los pesos `1×1` de NDDR.
-- Xavier/Glorot para convoluciones, GRU y capas densas ordinarias.
-- Bias inicializado en cero.
-- Checkpoint del mejor mAP y de la última época.
-- Sin early stopping por defecto, como en el paper; permanece disponible como
-  opción explícita.
+<!-- markdownlint-disable MD013 MD060 -->
+
+| Parámetro | Paper | Entrenamiento realizado |
+|-----------|-------|-------------------------|
+| GPU | Tesla T4 de 15 GB en Colab Pro+ | NVIDIA RTX A2000 de 12 GB |
+| Framework de GPU | Keras | PyTorch 2.11, CUDA 12.6 y cuDNN |
+| Batch size | 16 | 64 |
+| Épocas | 100 | 100 |
+| Early stopping | No | No |
+| Optimizador | Adam | Adam, `betas=(0.9,0.999)`, `eps=1e-8`, sin AMSGrad |
+| Learning rate inicial | `0.001` | `0.001` |
+| Scheduler | Exponencial staircase, factor `0.75` cada 90 pasos | Exponencial staircase, factor `0.75` cada 388 pasos |
+| Pasos por época | Aproximadamente 182 en el experimento original | 777, calculados como `ceil(49721 / 64)` |
+| Intervalo de decay | Aproximadamente media época | `round(777 × 0.5) = 388` pasos, aproximadamente media época |
+| Pérdida | Binary cross-entropy | `BCEWithLogitsLoss` con `pos_weight` limitado a `[1,20]` |
+| Precisión | No especificada | AMP float16 en CUDA con pesos maestros float32 |
+| Gradient clipping | No especificado | Norma global máxima 5.0 |
+| L2 NDDR | `0.01` | Weight decay `0.01` sobre pesos de convoluciones NDDR y skip `1×1` |
+| Weight decay restante | No especificado | `0.0001` |
+
+<!-- markdownlint-enable MD013 MD060 -->
+
+El scheduler implementa exactamente una función exponencial por escalones. Si
+$s$ es el número de actualizaciones completadas por Adam, la tasa es:
+
+$$
+\operatorname{lr}(s)=0.001\,(0.75)^{\left\lfloor s/388\right\rfloor}.
+$$
+
+Por tanto, la tasa permanece constante dentro de cada intervalo y cambia solo
+cuando se completa otro grupo de 388 pasos:
+
+```text
+Pasos       Learning rate
+0–387       0.001
+388–775     0.00075
+776–1163    0.0005625
+1164–1551   0.000421875
+```
+
+El paper reduce la tasa cada 90 pasos. No usamos 90 literalmente porque el batch
+y el número de clips producen 777 actualizaciones por época; se conserva su
+cadencia relativa de aproximadamente media época. El intervalo también puede
+fijarse literalmente mediante `training.lr_decay_steps`.
+
+El batch 64 se eligió después de un benchmark de forward y backward en la RTX
+A2000. Reduce una época de 6216 pasos con batch 8 a 777 pasos y cabe en sus 12 GB
+de VRAM. AMP disminuye el uso de memoria y acelera las convoluciones y GRU sin
+modificar la arquitectura.
+
+Los pesos ordinarios se inicializan con Xavier/Glorot y bias cero. Los pesos
+NDDR utilizan la inicialización diagonal, mientras la fusión de shortcuts parte
+de `[0.2, 0.2, 0.6]`. Se guarda `best.pt` según mAP de validación y `last.pt` al
+final de cada época. No se utiliza early stopping, siguiendo la decisión del
+paper.
 
 ### Registro completo de decisiones de adaptación
 

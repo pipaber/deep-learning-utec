@@ -36,8 +36,13 @@ src/animal_audio/
   cli.py                  # comandos
 scripts/
   remote_setup.sh         # prepara la workstation; no entrena
+presentation/
+  styles.scss             # estilos de la presentación Reveal.js
 tests/
-REPORT.md                 # decisiones y diferencias frente al paper
+REPORT.qmd                # reporte Quarto reproducible de la implementación
+REPORT.html               # versión HTML renderizada y autocontenida
+PRESENTATION.qmd          # diapositivas Reveal.js reproducibles
+PRESENTATION.html         # presentación renderizada y autocontenida
 ```
 
 ## Instalación
@@ -50,7 +55,25 @@ uv sync --frozen
 uv run animal-audio --help
 ```
 
-PyTorch está configurado con el índice CUDA 12.6 en `pyproject.toml`, compatible con la workstation usada para los experimentos.
+PyTorch está configurado con el índice CUDA 12.6 en `pyproject.toml`,
+compatible con la workstation usada para los experimentos.
+
+## Renderizar el reporte
+
+Con Quarto instalado, el reporte reproducible se genera mediante:
+
+```bash
+quarto render REPORT.qmd --to html
+```
+
+El comando produce `REPORT.html` como un documento autocontenido, incluyendo
+las fórmulas MathJax y el diagrama Mermaid. La presentación se genera con:
+
+```bash
+quarto render PRESENTATION.qmd --to revealjs
+```
+
+Esto produce `PRESENTATION.html`, también autocontenido.
 
 ## Preparar los datos
 
