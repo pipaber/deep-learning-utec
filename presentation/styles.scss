@@ -87,6 +87,21 @@ $presentation-block-margin: 14px;
   color: var(--r-link-color);
 }
 
+.reveal .audio-stage {
+  border: 2px solid var(--r-link-color);
+  border-radius: 0.45em;
+  margin: 1.2em auto;
+  max-width: 850px;
+  padding: 0.8em 1em;
+  text-align: center;
+}
+
+.reveal .audio-stage audio {
+  display: block;
+  margin: 0.65em auto;
+  width: 100%;
+}
+
 .reveal .muted {
   opacity: 0.72;
 }

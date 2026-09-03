@@ -1,6 +1,6 @@
 ---
-title: "Reconocimiento multietiqueta de animales"
-subtitle: "Implementación de NDDR-MTL en PyTorch"
+title: "¿Qué animales se esconden en tres segundos?"
+subtitle: "Del audio amazónico a 42 decisiones con NDDR-MTL"
 lang: es
 format:
   revealjs:
@@ -21,7 +21,34 @@ format:
     footer: "NDDR-MTL · Deep Learning UTEC"
 ---
 
-## Objetivo del laboratorio
+## Primero, escuchemos el problema
+
+:::: {.audio-stage}
+**Un clip real de tres segundos de la Amazonía**
+
+![Clip amazónico con dos especies superpuestas.](presentation/audio/amazon_multilabel_example.wav)
+
+::: {.muted}
+Escucha antes de avanzar: ¿cuántos animales distinguirías?
+:::
+::::
+
+::: {.fragment}
+**Etiquetas reales:** el clip contiene dos especies: **DENMIN** y **LEPPOD**.
+:::
+
+::: {.fragment .key-message}
+El reto no es escoger una sola respuesta, sino detectar todas las especies que
+pueden solaparse en el mismo audio.
+:::
+
+::: {.notes}
+Reproducir el audio y preguntar al público cuántas fuentes distingue. Avanzar
+una vez para revelar las dos etiquetas y otra para formular el problema
+multietiqueta.
+:::
+
+## Del sonido a 42 decisiones
 
 ::: {.columns}
 ::: {.column width="55%"}
@@ -58,7 +85,7 @@ Empezar distinguiendo multiclase de multietiqueta. Un clip puede no contener
 ninguna especie o contener varias simultáneamente.
 :::
 
-## Datos y salida esperada
+## La escala del reto
 
 ```{mermaid}
 %%| fig-width: 11
@@ -88,7 +115,7 @@ flowchart LR
 :::
 :::
 
-## ¿Por qué NDDR-MTL?
+## El dilema: ¿compartir o separar?
 
 ::: {.columns}
 ::: {.column width="49%"}
@@ -115,7 +142,7 @@ La propuesta central no es solo una CRNN: es el intercambio controlado entre
 rutas específicas mediante capas NDDR.
 :::
 
-## Representación del audio
+## Primero hacemos visible el sonido
 
 ```{mermaid}
 %%| fig-width: 11
@@ -138,7 +165,16 @@ PCEN estabiliza variaciones lentas de energía y realza eventos acústicos sobre
 ruido de fondo. La ablación reemplaza PCEN por log-Mel.
 :::
 
-## Arquitectura completa
+## El mismo clip, ahora visible
+
+![Comparación de forma de onda, log-Mel y PCEN para un clip etiquetado con DENMIN y LEPPOD.](presentation/figures/audio_examples/03_multiple_INCT17_20200320_033000_5_8.png){.r-stretch}
+
+::: {.compact}
+Etiquetas: **DENMIN** y **LEPPOD**. PCEN atenúa cambios lentos de energía y
+resalta eventos locales; el modelo recibe el tensor PCEN, no este archivo PNG.
+:::
+
+## Luego modelamos 42 tareas que colaboran
 
 ```{mermaid}
 %%| fig-width: 11
@@ -163,7 +199,7 @@ flowchart LR
 tres profundidades convolucionales.
 :::
 
-## Bloque CNN específico por especie
+## Cada especie aprende sus propios filtros
 
 ```{mermaid}
 %%| fig-width: 11
@@ -187,7 +223,7 @@ Los pesos de las 42 ramas son independientes. Una grouped convolution solo las
 ejecuta juntas para aprovechar mejor la GPU.
 :::
 
-## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+## La solución: intercambio NDDR {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
 
 ::: {.muted}
 Paso 1 de 3 · Reunir las representaciones específicas
@@ -214,7 +250,7 @@ $B\times168\times F\times T$
 Cada rama aporta cuatro canales discriminativos. La concatenación reúne la
 información de las 42 especies sin mezclarla todavía.
 
-## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+## La solución: intercambio NDDR {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
 
 ::: {.muted}
 Paso 2 de 3 · Estabilizar la representación conjunta
@@ -251,7 +287,7 @@ $\longrightarrow$
 BN normaliza cada canal concatenado antes de que las tareas intercambien
 información.
 
-## ¿Qué hace una capa NDDR? {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
+## La solución: intercambio NDDR {auto-animate="true" auto-animate-id="nddr-flow" auto-animate-easing="ease-in-out" auto-animate-duration="0.8"}
 
 ::: {.muted}
 Paso 3 de 3 · Fusionar y recuperar una salida por especie
@@ -317,7 +353,7 @@ Cada Conv $1\times1$ aprende cómo fusionar todas las especies para reconstruir
 la representación de una tarea concreta, sin cambiar frecuencia ni tiempo.
 :::
 
-## Inicialización diagonal NDDR
+## La pista inicial: confiar en la propia tarea
 
 Para tres tareas con dos canales, la proyección de la tarea A comienza como:
 
@@ -351,7 +387,7 @@ $$
 :::
 :::
 
-## Shortcuts entre capas NDDR
+## No olvidar las primeras pistas
 
 ```{mermaid}
 %%| fig-width: 11
@@ -375,7 +411,7 @@ $$
 
 Se enfatiza la información reciente sin descartar características tempranas.
 
-## Bloques recurrentes y salida
+## De patrones temporales a 42 decisiones
 
 ```{mermaid}
 %%| fig-width: 11
@@ -399,7 +435,7 @@ flowchart LR
 aplica `torch.sigmoid` para obtener probabilidades.
 :::
 
-## Adaptaciones del paper
+## Hacer viable el salto de 5 a 42 especies
 
 ::: {.smaller}
 | Componente | Paper | Implementación | Motivo |
@@ -418,7 +454,7 @@ Conservamos la topología NDDR-MTL; reducimos su ancho para hacer viable el salt
 de 5 a 42 rutas específicas.
 :::
 
-## Split sin fuga de información
+## Validar sin escuchar dos veces lo mismo
 
 Los clips son ventanas solapadas de grabaciones más largas:
 
@@ -442,7 +478,7 @@ flowchart LR
 
 **Semilla:** 42 · Ninguna grabación original aparece en ambos conjuntos.
 
-## Configuración de entrenamiento
+## Cómo enseñamos a la red
 
 ::: {.columns}
 ::: {.column width="50%"}
@@ -472,39 +508,39 @@ $$
 
 777 pasos por época; decay cada 388 pasos, aproximadamente media época.
 
-## Resultados preliminares
+## ¿Qué ha aprendido hasta ahora?
 
 ::: {.warning}
 El entrenamiento principal continúa. Estos valores corresponden al corte del
-epoch 26 y deben reemplazarse por la evaluación final de `best.pt`.
+epoch 81 y deben reemplazarse por la evaluación final de `best.pt`.
 :::
 
 ::: {.columns}
 ::: {.column width="33%"}
 <div class="metric">
-<strong>0.50585</strong>
+<strong>0.50605</strong>
 mejor validation mAP
 </div>
 :::
 ::: {.column width="33%"}
 <div class="metric">
-<strong>16</strong>
+<strong>52</strong>
 mejor epoch observado
 </div>
 :::
 ::: {.column width="33%"}
 <div class="metric">
-<strong>0.25860</strong>
+<strong>0.26031</strong>
 validation loss en ese epoch
 </div>
 :::
 :::
 
-- Último corte: epoch 26, mAP $0.50440$.
+- Último corte: epoch 81, mAP $0.50305$.
 - El mAP se estabilizó alrededor de $0.50$.
 - `best.pt` y `last.pt` se guardan en cada época.
 
-## Ablación: PCEN frente a log-Mel
+## La pregunta experimental: ¿PCEN ayuda?
 
 Se mantendrá constante:
 
@@ -516,13 +552,13 @@ Solo cambia la representación de entrada:
 
 | Experimento | Entrada | Configuración | Estado |
 |---|---|---|---|
-| Principal | PCEN | `configs/nddr_pcen.yaml` | Entrenando |
+| Principal | PCEN | `configs/nddr_pcen.yaml` | Epoch 81/100 |
 | Ablación | log-Mel | `configs/nddr_logmel.yaml` | Pendiente |
 
 **Comparación final:** mAP, micro/macro F1, exact match, curvas PR y AP por
 especie.
 
-## Análisis de errores previsto
+## ¿Dónde puede equivocarse?
 
 ::: {.columns}
 ::: {.column width="50%"}
@@ -548,7 +584,7 @@ especie.
 Se mostrarán espectrogramas de errores representativos para relacionar las
 predicciones con ruido, solapamiento y baja energía.
 
-## Conclusiones
+## Lo que construimos
 
 1. NDDR-MTL mantiene rutas CNN y GRU específicas para cada especie.
 2. Las convoluciones $1\times1$ permiten intercambio aprendido entre las 42
@@ -562,7 +598,7 @@ predicciones con ruido, solapamiento y baja energía.
 El aporte implementado es la estructura NDDR-MTL completa, no una CRNN genérica.
 :::
 
-## Trabajo restante
+## Trabajo restante {visibility="hidden"}
 
 - Completar los 100 epochs del experimento PCEN.
 - Evaluar el mejor checkpoint con umbrales de validación.
@@ -575,7 +611,7 @@ Esta diapositiva no debe aparecer en la entrega final. Sirve como checklist
 mientras los experimentos continúan.
 :::
 
-## Apéndice: dimensiones completas {.smaller}
+## Apéndice: dimensiones completas {.smaller visibility="uncounted"}
 
 | Etapa | Forma por especie | Forma concatenada |
 |---|---:|---:|
@@ -591,7 +627,7 @@ mientras los experimentos continúan.
 | Temporal max pool | $B\times16$ | — |
 | Clasificador | $B\times1$ | $B\times42$ |
 
-## Apéndice: pérdida multietiqueta
+## Apéndice: pérdida multietiqueta {visibility="uncounted"}
 
 Para logits $z_{ik}$, targets $y_{ik}$ y pesos positivos $p_k$:
 
@@ -610,7 +646,7 @@ $$
 - Una clase sin positivos recibe $p_k=1$.
 - `SCIFUS` y `SCINAS` no tienen positivos en entrenamiento.
 
-## Apéndice: código de la implementación
+## Apéndice: código de la implementación {visibility="uncounted"}
 
 | Componente | Archivo y símbolo |
 |---|---|

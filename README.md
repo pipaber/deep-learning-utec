@@ -35,9 +35,12 @@ src/animal_audio/
   engine.py               # entrenamiento, evaluación e inferencia
   cli.py                  # comandos
 scripts/
-  remote_setup.sh         # prepara la workstation; no entrena
+  generate_audio_examples.py  # visualiza forma de onda, log-Mel y PCEN
+  remote_setup.sh             # prepara la workstation; no entrena
 presentation/
-  styles.scss             # estilos de la presentación Reveal.js
+  audio/                      # clip WAV usado en la apertura de Reveal.js
+  figures/audio_examples/     # ejemplos reales para reporte y diapositivas
+  styles.scss                 # estilos de la presentación Reveal.js
 tests/
 REPORT.qmd                # reporte Quarto reproducible de la implementación
 REPORT.html               # versión HTML renderizada y autocontenida
@@ -105,6 +108,24 @@ uv run animal-audio prepare --config configs/nddr_pcen.yaml --force
 
 El split se guarda en `artifacts/split_seed42.csv`. Las ventanas solapadas de
 una grabación permanecen juntas para evitar fuga de información.
+
+## Generar ejemplos de las representaciones
+
+El siguiente comando selecciona de forma determinística un clip sin especies,
+uno con una especie y uno con múltiples especies:
+
+```bash
+uv run python scripts/generate_audio_examples.py \
+  --config configs/nddr_pcen.yaml \
+  --output-dir artifacts/figures/audio_examples \
+  --examples-per-category 1 \
+  --seed 42
+```
+
+Cada PNG compara la forma de onda, log-Mel y PCEN del mismo clip. También se
+genera `manifest.csv` con el archivo, categoría y etiquetas. Estas figuras son
+solo para visualización; el entrenamiento sigue calculando PCEN directamente en
+memoria.
 
 ## Inspeccionar el modelo sin entrenar
 

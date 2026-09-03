@@ -232,6 +232,32 @@ $$
 con $g=0.98$, $\delta=0.05$, $r=0.5$ y $\varepsilon=10^{-4}$.
 
 El frontend fue implementado en PyTorch, incluyendo el banco triangular Mel.
+Las siguientes figuras se generaron directamente desde WAV reales con
+`scripts/generate_audio_examples.py`; los PNG son solo visualizaciones y no son
+la entrada almacenada del entrenamiento.
+
+### Ejemplos reales
+
+::: {.panel-tabset}
+
+#### Sin especies etiquetadas
+
+![Forma de onda, log-Mel y PCEN de un clip sin especies etiquetadas.](presentation/figures/audio_examples/01_none_INCT4_20201012_181500_37_40.png)
+
+#### Una especie
+
+![Forma de onda, log-Mel y PCEN de un clip etiquetado con PHYSAU.](presentation/figures/audio_examples/02_single_INCT17_20191224_171500_38_41.png)
+
+#### Múltiples especies
+
+![Forma de onda, log-Mel y PCEN de un clip etiquetado con DENMIN y LEPPOD.](presentation/figures/audio_examples/03_multiple_INCT17_20200320_033000_5_8.png)
+
+:::
+
+La comparación muestra que log-Mel conserva la escala logarítmica absoluta,
+mientras PCEN normaliza variaciones lentas de energía y hace más visibles los
+cambios acústicos locales. No debe interpretarse visualmente una banda concreta
+como una especie sin contrastarla con sus etiquetas y predicciones.
 
 ## 4. Adaptación de cinco a 42 tareas
 
