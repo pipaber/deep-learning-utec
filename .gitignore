@@ -23,6 +23,7 @@ test/
 train/
 *.7z
 *.csv
+!results/**/*.csv
 
 # Model artifacts and experiment output
 *.pt

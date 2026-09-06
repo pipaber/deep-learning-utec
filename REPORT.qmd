@@ -502,32 +502,158 @@ split 80/20 y no cuatro folds. El mejor checkpoint se selecciona por mAP en ese
 mismo conjunto de validación, por lo que sus métricas son apropiadas para
 selección de modelo pero no equivalen a una estimación independiente de test.
 
-## 10. Archivos de resultados
+## 10. Resultados
 
-Después del entrenamiento y evaluación se generarán:
+Todos los resultados siguientes corresponden al split fijo de validación, al
+mejor checkpoint seleccionado por mAP y a un umbral de decisión de 0.5. El mAP
+se calcula sobre las 39 clases con al menos un positivo en validación.
 
-- Curvas de pérdida y mAP en `history.csv`/`history.json`.
-- `metrics.json`.
-- `thresholds.json` y `thresholds.csv`.
-- Curvas PR.
-- Gráfico de prevalencia frente a AP.
-- Probabilidades de validación con targets.
-- `test_probabilities.csv`.
-- `test_predictions.csv`.
+### Comparación global
 
-## 11. Resultados pendientes
+<!-- markdownlint-disable MD013 MD060 -->
 
-Esta sección debe completarse después de entrenar en la workstation:
+| Sistema | Mejor epoch | mAP | Micro F1 | Macro F1 | Exact match | Label accuracy | Hamming loss |
+|---------|-------------:|----:|---------:|---------:|------------:|---------------:|-------------:|
+| Vector de ceros | — | 0.04143 | 0.00000 | 0.00000 | 0.34667 | 0.96153 | 0.03847 |
+| NDDR-MTL + PCEN | 85 | 0.50641 | 0.66684 | 0.44231 | 0.38412 | 0.96522 | 0.03478 |
+| NDDR-MTL + log-Mel | 23 | **0.55069** | **0.69797** | **0.46905** | **0.43561** | **0.97088** | **0.02912** |
 
-| Experimento        | mAP | Micro F1 | Macro F1 | Exact match | Accuracy |
-|--------------------|----:|---------:|---------:|------------:|---------:|
-| NDDR-MTL + PCEN    |   — |        — |        — |           — |        — |
-| NDDR-MTL + log-Mel |   — |        — |        — |           — |        — |
+<!-- markdownlint-enable MD013 MD060 -->
 
-También se deberá describir:
+![Comparación de las métricas principales en validación.](results/analysis/model_comparison.png)
 
-- Especies con menor AP.
-- Falsos positivos y negativos principales.
-- Relación entre frecuencia de clase y desempeño.
-- Efecto del número de especies simultáneas.
-- Limitación causada por las dos especies sin positivos.
+Log-Mel mejora frente a PCEN en 0.04428 mAP, 0.03113 micro F1, 0.02674
+macro F1 y 0.05148 exact match. También reduce Hamming loss en 0.00566. La
+mejora relativa de mAP es aproximadamente 8.7 %. El modelo log-Mel aumenta
+precision micro de 0.52798 a 0.58062, aunque reduce recall micro de 0.90480 a
+0.87477; por tanto, elimina falsos positivos a cambio de omitir algunos
+positivos adicionales.
+
+La alta accuracy del baseline no representa reconocimiento útil: 96.15 % de
+las decisiones individuales se aciertan prediciendo siempre ausencia debido al
+desbalance, pero su micro F1 es cero y su mAP es solo 0.04143. Esto justifica
+priorizar mAP, F1 y exact match sobre accuracy aislada.
+
+### Dinámica de entrenamiento
+
+![Pérdida, mAP y learning rate durante los 100 epochs.](results/analysis/training_curves.png)
+
+Ambos modelos convergen durante los primeros epochs. El scheduler reduce la
+tasa dos veces por época y la lleva prácticamente a cero muy pronto; después de
+ese punto las oscilaciones de las métricas no corresponden a actualizaciones
+relevantes. Los historiales no permiten atribuir una causa única a esas
+oscilaciones. Los 100 epochs se conservaron para seguir el presupuesto acordado,
+pero esta curva indica que un scheduler más lento sería
+una mejora metodológica importante.
+
+## 11. Resultado de la ablación
+
+La ablación muestra que PCEN no mejora este experimento: log-Mel obtiene mejor
+resultado agregado manteniendo constantes arquitectura, split, semilla,
+optimizador y presupuesto. Sin embargo, el efecto no es uniforme entre clases.
+
+![Average Precision por especie para PCEN y log-Mel.](results/analysis/per_class_ap.png)
+
+Las mayores ganancias de AP con log-Mel son:
+
+| Especie | $\Delta AP$ log-Mel − PCEN |
+|---------|----------------------------:|
+| SCIALT | +0.42330 |
+| BOAPRA | +0.39625 |
+| SCIRIZ | +0.37287 |
+| AMEPIC | +0.32194 |
+| DENELE | +0.28349 |
+
+Las mayores pérdidas son:
+
+| Especie | $\Delta AP$ log-Mel − PCEN |
+|---------|----------------------------:|
+| LEPNOT | −0.51112 |
+| RHIICT | −0.40386 |
+| ADEMAR | −0.21572 |
+| PHYCUV | −0.15017 |
+| DENNAH | −0.04842 |
+
+Por ello, el resultado no implica que log-Mel sea universalmente superior:
+PCEN favorece varias especies concretas, posiblemente por diferencias en
+estacionariedad, intensidad o ruido de fondo. Con una sola semilla no se puede
+cuantificar la variabilidad estadística de estas diferencias.
+
+## 12. Resultados por concurrencia
+
+![Micro F1 y exact match según el número de especies verdaderas.](results/analysis/concurrency.png)
+
+Log-Mel iguala o supera a PCEN en todos los grupos. El micro F1 aumenta con la
+cantidad de etiquetas positivas, pero exact match cae: log-Mel obtiene
+aproximadamente 0.73 para clips vacíos y 0.24 para clips con tres o más
+especies. Exact match exige acertar simultáneamente las 42 decisiones, por lo
+que una sola inserción u omisión invalida todo el clip.
+
+Las combinaciones más frecuentes también presentan dificultad desigual:
+
+![Exact match de las combinaciones de etiquetas más frecuentes.](results/analysis/label_combinations.png)
+
+El vector vacío es la combinación más frecuente, con 4323 clips y exact match
+de 0.72959. Entre combinaciones no vacías, `BOAFAB` obtiene 0.32847 y
+`BOALUN+BOAALB` cerca de 0.04, mientras `BOABIS` alcanza 0.72727. Esto confirma
+que la concurrencia por sí sola no explica el error; también importan la
+identidad y coocurrencia de las especies.
+
+## 13. Análisis de errores
+
+![Clases con mayores tasas de falsos positivos y falsos negativos para log-Mel.](results/analysis/error_rankings.png)
+
+Las tasas más altas de falsos positivos corresponden a `BOABIS` (7.71 %),
+`PITAZU` (7.59 %), `PHYSAU` (6.35 %), `DENNAN` (6.34 %) y `BOAALB` (6.19 %).
+En clips verdaderamente vacíos, la inserción incorrecta más común es `BOAALB`.
+
+`AMEPIC`, `LEPELE`, `RHIORN` y `LEPFLA` tienen 100 % de falsos negativos con
+umbral 0.5, pero cuentan con solo 32, 30, 11 y 3 positivos respectivamente. La
+escasez vuelve estas tasas inestables. `PHYNAT` es un caso más preocupante:
+omite 203 de sus positivos, equivalente a 95.31 %.
+
+![Espectrogramas log-Mel de falsos positivos y falsos negativos de mayor confianza.](results/analysis/error_examples.png)
+
+Dos de los tres falsos positivos seleccionados aparecen en ventanas consecutivas
+de una misma grabación. En ese caso concreto, la repetición sugiere una confusión
+sistemática o posibles omisiones de etiquetado, no un error aislado. Los falsos negativos muestran
+patrones tonales visibles, pero esos patrones pueden solaparse con otras clases
+o corresponder a eventos débiles dentro del clip. Sin revisar el audio y la
+anotación original no se puede atribuir causalidad solo a partir del
+espectrograma.
+
+## 14. Limitaciones
+
+- Se utilizó un único split y una única semilla; no hay intervalos de confianza.
+- `SCIFUS` y `SCINAS` no tienen positivos globales, y `RHISCI` no tiene positivos
+  en validación. No es posible estimar AP para estas tres clases.
+- El dataset está fuertemente desbalanceado y exact match está influido por los
+  4323 clips sin especies etiquetadas.
+- Los umbrales optimizados por clase mejoraron macro F1 de 0.46905 a 0.58483,
+  pero redujeron micro F1 a 0.41339, elevaron Hamming loss a 0.08985 y produjeron
+  exact match cero. Por transparencia, los resultados principales y las
+  predicciones de test usan 0.5.
+- El learning rate decay resultó demasiado agresivo y dejó de producir cambios
+  relevantes mucho antes del epoch 100.
+- Reducir de 64 a 4 canales CNN y de 128 a 16 unidades GRU hace viable el modelo,
+  pero limita su capacidad respecto al paper.
+- Las tres entradas espectrales son copias del mismo MS-PCEN/log-Mel; repetirlas
+  no agrega información nueva.
+- Test no tiene etiquetas, por lo que no permite calcular métricas finales.
+- Los códigos de especie no incluyen una tabla de nombres comunes o científicos.
+
+## 15. Artefactos y predicciones de test
+
+El análisis reproducible se genera con `scripts/generate_analysis.py`. Los
+resultados compactos y gráficos están versionados en `results/`. Los artefactos
+completos de cada experimento permanecen en `artifacts/experiments/`.
+
+El mejor modelo final es NDDR-MTL + log-Mel, checkpoint del epoch 23. Se generaron
+probabilidades y decisiones con umbral 0.5 para los 31,187 clips de test:
+
+- `artifacts/experiments/nddr_logmel/test_probabilities.csv`.
+- `artifacts/experiments/nddr_logmel/test_predictions.csv`.
+
+Cada tabla conserva el orden de las 42 etiquetas del checkpoint. Las
+probabilidades permiten aplicar otros umbrales posteriormente sin repetir la
+inferencia.

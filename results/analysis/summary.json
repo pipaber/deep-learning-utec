@@ -1,0 +1,105 @@
+{
+  "threshold": 0.5,
+  "pcen_best_epoch": 85,
+  "logmel_best_epoch": 23,
+  "pcen": {
+    "mAP": 0.5064097483849322,
+    "label_accuracy": 0.9652212930079811,
+    "exact_match": 0.38412189254210105,
+    "hamming_loss": 0.03477870699201894,
+    "micro_precision": 0.5279789144412906,
+    "micro_recall": 0.9047997220429841,
+    "micro_f1": 0.6668373785963821,
+    "macro_precision": 0.36245475955736545,
+    "macro_recall": 0.649806288849442,
+    "macro_f1": 0.4423101417271472
+  },
+  "logmel": {
+    "mAP": 0.550691548133513,
+    "label_accuracy": 0.9708767709168672,
+    "exact_match": 0.4356054530874098,
+    "hamming_loss": 0.029123229083132852,
+    "micro_precision": 0.5806154048889768,
+    "micro_recall": 0.8747704372859483,
+    "micro_f1": 0.6979663769034277,
+    "macro_precision": 0.41808852875321106,
+    "macro_recall": 0.632062529132398,
+    "macro_f1": 0.4690459908917062
+  },
+  "delta_logmel_minus_pcen": {
+    "mAP": 0.04428179974858071,
+    "label_accuracy": 0.005655477908886097,
+    "exact_match": 0.051483560545308726,
+    "hamming_loss": -0.005655477908886087,
+    "micro_precision": 0.052636490447686146,
+    "micro_recall": -0.030029284757035812,
+    "micro_f1": 0.03112899830704552,
+    "macro_precision": 0.05563376919584562,
+    "macro_recall": -0.017743759717044005,
+    "macro_f1": 0.026735849164558956
+  },
+  "zero_baseline": {
+    "mAP": 0.04142660333518393,
+    "label_accuracy": 0.9615324397601863,
+    "exact_match": 0.3466720128307939,
+    "hamming_loss": 0.038467560239813646,
+    "micro_precision": 0.0,
+    "micro_recall": 0.0,
+    "micro_f1": 0.0,
+    "macro_precision": 0.0,
+    "macro_recall": 0.0,
+    "macro_f1": 0.0
+  },
+  "supported_classes": 39,
+  "unsupported_classes": [
+    "SCIFUS",
+    "RHISCI",
+    "SCINAS"
+  ],
+  "top_logmel_ap_gains": [
+    {
+      "label": "SCIALT",
+      "delta_ap": 0.423301650101358
+    },
+    {
+      "label": "BOAPRA",
+      "delta_ap": 0.39624819085128016
+    },
+    {
+      "label": "SCIRIZ",
+      "delta_ap": 0.37286846214189195
+    },
+    {
+      "label": "AMEPIC",
+      "delta_ap": 0.3219408808400073
+    },
+    {
+      "label": "DENELE",
+      "delta_ap": 0.2834939909809194
+    }
+  ],
+  "top_logmel_ap_losses": [
+    {
+      "label": "LEPNOT",
+      "delta_ap": -0.5111211472080056
+    },
+    {
+      "label": "RHIICT",
+      "delta_ap": -0.40386319541833005
+    },
+    {
+      "label": "ADEMAR",
+      "delta_ap": -0.21571992454330186
+    },
+    {
+      "label": "PHYCUV",
+      "delta_ap": -0.15016706158697302
+    },
+    {
+      "label": "DENNAH",
+      "delta_ap": -0.04842108200173209
+    }
+  ],
+  "pcen_epochs": 100,
+  "logmel_epochs": 100
+}

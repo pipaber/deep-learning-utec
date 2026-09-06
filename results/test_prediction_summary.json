@@ -1,0 +1,10 @@
+{
+  "model": "NDDR-MTL + log-Mel",
+  "checkpoint_epoch": 23,
+  "threshold": 0.5,
+  "samples": 31187,
+  "labels": 42,
+  "probabilities_path": "artifacts/experiments/nddr_logmel/test_probabilities.csv",
+  "predictions_path": "artifacts/experiments/nddr_logmel/test_predictions.csv",
+  "threshold_note": "Per-class optimized thresholds were not used because they degraded aggregate validation metrics and produced zero exact match."
+}

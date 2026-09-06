@@ -508,108 +508,174 @@ $$
 
 777 pasos por época; decay cada 388 pasos, aproximadamente media época.
 
-## ¿Qué ha aprendido hasta ahora?
-
-::: {.warning}
-El entrenamiento principal continúa. Estos valores corresponden al corte del
-epoch 81 y deben reemplazarse por la evaluación final de `best.pt`.
-:::
+## ¿Qué aprendió el modelo?
 
 ::: {.columns}
-::: {.column width="33%"}
+::: {.column width="25%"}
 <div class="metric">
-<strong>0.50605</strong>
-mejor validation mAP
+<strong>0.55069</strong>
+mAP log-Mel
 </div>
 :::
-::: {.column width="33%"}
+::: {.column width="25%"}
 <div class="metric">
-<strong>52</strong>
-mejor epoch observado
+<strong>0.69797</strong>
+micro F1
 </div>
 :::
-::: {.column width="33%"}
+::: {.column width="25%"}
 <div class="metric">
-<strong>0.26031</strong>
-validation loss en ese epoch
+<strong>0.46905</strong>
+macro F1
+</div>
+:::
+::: {.column width="25%"}
+<div class="metric">
+<strong>0.43561</strong>
+exact match
 </div>
 :::
 :::
 
-- Último corte: epoch 81, mAP $0.50305$.
-- El mAP se estabilizó alrededor de $0.50$.
-- `best.pt` y `last.pt` se guardan en cada época.
+- Mejor checkpoint log-Mel: epoch **23**.
+- Evaluación sobre 12,470 clips, umbral 0.5.
+- mAP sobre 39 clases con soporte positivo.
+- Hamming loss: **0.02912**.
+
+::: {.key-message}
+El modelo supera claramente al baseline de ceros, cuyo mAP es 0.04143 y micro
+F1 es cero.
+:::
+
+## Comparación final
+
+![Comparación de NDDR-MTL con PCEN, log-Mel y el baseline de ceros.](results/analysis/model_comparison.png){.r-stretch}
+
+Log-Mel supera a PCEN en **0.04428 mAP**, **0.03113 micro F1** y **0.05148
+exact match**.
+
+## ¿Cuándo dejó de aprender?
+
+![Curvas de entrenamiento, validación, mAP y learning rate.](results/analysis/training_curves.png){.r-stretch}
+
+::: {.compact}
+Ambos modelos convergen temprano. El decay aplicado dos veces por época lleva
+el learning rate casi a cero mucho antes del epoch 100; un scheduler más lento
+es una mejora futura importante.
+:::
 
 ## La pregunta experimental: ¿PCEN ayuda?
 
-Se mantendrá constante:
-
-- Arquitectura NDDR-MTL y número de parámetros.
-- Split, semilla, optimizador y número de épocas.
-- Batch size y scheduler.
-
-Solo cambia la representación de entrada:
-
-| Experimento | Entrada | Configuración | Estado |
-|---|---|---|---|
-| Principal | PCEN | `configs/nddr_pcen.yaml` | Epoch 81/100 |
-| Ablación | log-Mel | `configs/nddr_logmel.yaml` | Pendiente |
-
-**Comparación final:** mAP, micro/macro F1, exact match, curvas PR y AP por
-especie.
-
-## ¿Dónde puede equivocarse?
-
 ::: {.columns}
 ::: {.column width="50%"}
-**Por especie**
+**Resultado agregado**
 
-- Ranking de falsos positivos.
-- Ranking de falsos negativos.
-- Prevalencia frente a AP.
-- Clases sin soporte positivo.
+| Entrada | mAP | Micro F1 |
+|---|---:|---:|
+| PCEN | 0.50641 | 0.66684 |
+| log-Mel | **0.55069** | **0.69797** |
+
+Log-Mel mejora mAP aproximadamente **8.7 %** de forma relativa.
 :::
 
 ::: {.column width="50%"}
-**Por complejidad del clip**
+**El efecto depende de la especie**
 
-- Ninguna especie.
-- Una especie.
-- Dos especies.
-- Tres o más especies.
-- Combinaciones multietiqueta frecuentes.
+Mayores ganancias de AP:
+
+- SCIALT: +0.423
+- BOAPRA: +0.396
+- SCIRIZ: +0.373
+
+Mayores pérdidas:
+
+- LEPNOT: −0.511
+- RHIICT: −0.404
 :::
 :::
 
-Se mostrarán espectrogramas de errores representativos para relacionar las
-predicciones con ruido, solapamiento y baja energía.
+::: {.key-message}
+PCEN no mejora el promedio de este dataset, pero sí beneficia a algunas
+especies concretas.
+:::
+
+## El reto aumenta con la concurrencia
+
+![Micro F1 y exact match según el número de especies verdaderas.](results/analysis/concurrency.png){.r-stretch}
+
+Exact match cae porque exige acertar simultáneamente las 42 decisiones: una sola
+inserción u omisión invalida todo el clip.
+
+## ¿Dónde se equivoca?
+
+![Especies con mayores tasas de falsos positivos y negativos.](results/analysis/error_rankings.png){.r-stretch}
+
+::: {.compact}
+Los FN de 100 % corresponden principalmente a clases muy raras. `PHYNAT` es más
+preocupante: se omiten 203 positivos, equivalentes a 95.31 %.
+:::
+
+## Errores de mayor confianza
+
+![Espectrogramas log-Mel de errores de mayor confianza.](results/analysis/error_examples.png){.r-stretch}
+
+::: {.compact}
+Dos FP pertenecen a ventanas consecutivas de una grabación, lo que sugiere
+confusión sistemática o posibles omisiones de etiquetado en ese caso. Un espectrograma por sí solo no permite
+atribuir la causa definitiva.
+:::
+
+## Limitaciones
+
+- Un único split y una única semilla: no hay intervalos de confianza.
+- Tres clases no tienen soporte positivo en validación.
+- Dataset fuertemente desbalanceado; 4323 clips no tienen especies etiquetadas.
+- El decay del learning rate fue demasiado agresivo.
+- La arquitectura compacta usa 4 canales CNN y 16 unidades GRU.
+- Los tres canales de entrada son copias del mismo espectrograma.
+- Test no tiene etiquetas, por lo que no ofrece métricas finales.
+
+## Del modelo a 31,187 predicciones
+
+```{mermaid}
+%%| fig-width: 11
+%%| fig-height: 3.5
+flowchart LR
+    A["Best log-Mel · epoch 23"] --> B["31,187 WAV de test"]
+    B --> C["42 probabilidades por clip"]
+    C --> D["Umbral 0.5"]
+    D --> E["test_predictions.csv"]
+```
+
+- Se conserva el orden de las 42 etiquetas.
+- `test_probabilities.csv` permite cambiar el umbral sin repetir inferencia.
+- No usamos umbrales optimizados: mejoraron macro F1, pero redujeron micro F1 de
+  0.698 a 0.413 y produjeron exact match cero.
 
 ## Lo que construimos
 
-1. NDDR-MTL mantiene rutas CNN y GRU específicas para cada especie.
-2. Las convoluciones $1\times1$ permiten intercambio aprendido entre las 42
-   rutas.
-3. Los shortcuts integran características de las tres profundidades NDDR.
-4. La salida y la pérdida se adaptaron a 42 etiquetas independientes.
-5. La reducción a 4 canales CNN y 16 unidades GRU hace entrenable la propuesta
-   sin eliminar sus componentes centrales.
+1. Implementamos NDDR-MTL con rutas CNN y GRU específicas para 42 especies.
+2. Las convoluciones $1\times1$ permiten intercambio aprendido entre tareas.
+3. Los shortcuts integran las tres profundidades NDDR.
+4. Log-Mel superó a PCEN: **0.55069 frente a 0.50641 mAP**.
+5. El modelo final produjo probabilidades y decisiones para todo el test.
 
 ::: {.key-message}
-El aporte implementado es la estructura NDDR-MTL completa, no una CRNN genérica.
+La representación más compleja no fue la mejor: para este dataset, preservar
+log-Mel produjo mejores resultados que aplicar PCEN.
 :::
 
-## Trabajo restante {visibility="hidden"}
+## Apéndice: AP por especie {visibility="uncounted"}
 
-- Completar los 100 epochs del experimento PCEN.
-- Evaluar el mejor checkpoint con umbrales de validación.
-- Entrenar la ablación log-Mel.
-- Generar gráficos, predicciones de test y análisis de errores.
-- Sustituir esta diapositiva y los resultados preliminares por valores finales.
+![Average Precision por especie para PCEN y log-Mel.](results/analysis/per_class_ap.png){.r-stretch}
 
-::: {.notes}
-Esta diapositiva no debe aparecer en la entrega final. Sirve como checklist
-mientras los experimentos continúan.
-:::
+## Apéndice: combinaciones frecuentes {visibility="uncounted"}
+
+![Exact match de las combinaciones verdaderas más frecuentes.](results/analysis/label_combinations.png){.r-stretch}
+
+## Apéndice: distribución de clases {visibility="uncounted"}
+
+![Cantidad de positivos por especie en train y validación.](results/analysis/class_distribution.png){.r-stretch}
 
 ## Apéndice: dimensiones completas {.smaller visibility="uncounted"}
 

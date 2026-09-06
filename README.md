@@ -35,8 +35,10 @@ src/animal_audio/
   engine.py               # entrenamiento, evaluación e inferencia
   cli.py                  # comandos
 scripts/
+  generate_analysis.py        # comparación, gráficos y análisis de errores
   generate_audio_examples.py  # visualiza forma de onda, log-Mel y PCEN
   remote_setup.sh             # prepara la workstation; no entrena
+results/                      # métricas y figuras finales versionadas
 presentation/
   audio/                      # clip WAV usado en la apertura de Reveal.js
   figures/audio_examples/     # ejemplos reales para reporte y diapositivas
@@ -175,6 +177,11 @@ uv run animal-audio evaluate \
   --config configs/nddr_pcen.yaml \
   --checkpoint artifacts/experiments/nddr_pcen/best.pt \
   --device cuda
+
+uv run animal-audio evaluate \
+  --config configs/nddr_logmel.yaml \
+  --checkpoint artifacts/experiments/nddr_logmel/best.pt \
+  --device cuda
 ```
 
 Genera, entre otros:
@@ -187,7 +194,20 @@ Genera, entre otros:
 - `prevalence_vs_ap.png`
 
 Se reportan resultados con umbral fijo 0.5, como en el paper, y con umbrales
-optimizados exclusivamente sobre validación.
+optimizados exclusivamente sobre validación. Para generar la comparación,
+curvas, análisis por especie, concurrencia y errores:
+
+```bash
+uv run python scripts/generate_analysis.py \
+  --pcen-dir artifacts/experiments/nddr_pcen \
+  --logmel-dir artifacts/experiments/nddr_logmel \
+  --split-csv artifacts/split_seed42.csv \
+  --config configs/nddr_logmel.yaml \
+  --output-dir results/analysis \
+  --threshold 0.5
+```
+
+Los resultados compactos seleccionados para la entrega están en `results/`.
 
 ## Predicciones de test
 
@@ -195,20 +215,14 @@ Con umbral fijo 0.5:
 
 ```bash
 uv run animal-audio predict \
-  --config configs/nddr_pcen.yaml \
-  --checkpoint artifacts/experiments/nddr_pcen/best.pt \
+  --config configs/nddr_logmel.yaml \
+  --checkpoint artifacts/experiments/nddr_logmel/best.pt \
   --device cuda
 ```
 
-Con umbrales de validación:
-
-```bash
-uv run animal-audio predict \
-  --config configs/nddr_pcen.yaml \
-  --checkpoint artifacts/experiments/nddr_pcen/best.pt \
-  --thresholds artifacts/experiments/nddr_pcen/thresholds.json \
-  --device cuda
-```
+Los umbrales optimizados por clase se conservan como artefacto de análisis, pero
+no se utilizaron para el test porque degradaron micro F1 y produjeron exact
+match cero en la misma validación.
 
 Salidas:
 
