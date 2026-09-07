@@ -24,6 +24,8 @@ principal.
 ## Contenido
 
 - `analysis/summary.json`: resumen y diferencias log-Mel menos PCEN.
+- `analysis/eda_summary.json`: estadísticos del split, clases y pares frecuentes.
+- `analysis/eda_overview.png`: panel EDA usado en reporte y presentación.
 - `analysis/per_class_metrics.csv`: AP, F1 y prevalencia por clase.
 - `analysis/error_rankings.csv`: tasas de falsos positivos y negativos.
 - `analysis/label_combination_errors.csv`: errores por combinación verdadera.

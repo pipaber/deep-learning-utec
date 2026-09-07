@@ -115,6 +115,16 @@ flowchart LR
 :::
 :::
 
+## ¿Cómo es realmente el dataset?
+
+![Distribución de etiquetas, clases frecuentes, coocurrencias y resumen descriptivo del split.](results/analysis/eda_overview.png){.r-stretch}
+
+::: {.tiny .muted}
+Hay muchos clips vacíos, pero también 16,210 clips con tres o más etiquetas. La
+coocurrencia `SPHSUR + BOABIS` aparece 8,582 veces: las tareas no son
+independientes y pueden beneficiarse de compartir información.
+:::
+
 ## El dilema: ¿compartir o separar?
 
 ::: {.columns}
@@ -140,6 +150,23 @@ Ambos extremos pueden perder eficiencia o especialización.
 ::: {.key-message}
 La propuesta central no es solo una CRNN: es el intercambio controlado entre
 rutas específicas mediante capas NDDR.
+:::
+
+## Arquitecturas evaluadas en el paper
+
+![](presentation/figures/paper/figure8_architectures.jpg){.r-stretch fig-alt="Comparación del paper entre CMLC o BR, HPS-MTL y NDDR-MTL."}
+
+::: {.tiny .muted}
+**Fig. 8.** CMLC/BR usa una CRNN convencional; HPS-MTL comparte el extractor
+CNN y separa las rutas recurrentes; NDDR-MTL mantiene rutas específicas e
+intercambia características mediante capas NDDR y shortcuts. **Fuente:** Olcay
+et al. (2026), [doi:10.1038/s44384-026-00060-x](https://doi.org/10.1038/s44384-026-00060-x).
+:::
+
+::: {.notes}
+La figura original presenta cinco tareas bioacústicas. Nuestra implementación
+adapta la arquitectura inferior, NDDR-MTL, a 42 especies. Conviene señalar las
+capas NDDR en celeste y las conexiones de shortcut en rojo y magenta.
 :::
 
 ## Primero hacemos visible el sonido
@@ -507,6 +534,22 @@ $$
 $$
 
 777 pasos por época; decay cada 388 pasos, aproximadamente media época.
+
+## ¿Qué estamos comparando?
+
+::: {.small}
+| Sistema | Qué representa | Pregunta que responde |
+|---|---|---|
+| **Baseline de ceros** | Sanity check; no es una red neuronal | ¿Qué ocurre si siempre predecimos ausencia? |
+| **NDDR-MTL + PCEN** | Modelo del paper adaptado a 42 especies | ¿Cómo funciona el método principal? |
+| **NDDR-MTL + log-Mel** | Ablación de la representación | ¿Qué cambia al retirar PCEN? |
+:::
+
+::: {.key-message}
+Los dos modelos NDDR comparten arquitectura, split, semilla, Adam, batch y 100
+épocas. **Solo cambia PCEN frente a log-Mel**, por lo que la comparación aísla la
+representación de entrada.
+:::
 
 ## ¿Qué aprendió el modelo?
 

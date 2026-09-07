@@ -1,0 +1,114 @@
+{
+  "splits": {
+    "Train": {
+      "clips": 49721,
+      "mean_labels": 1.4828342149192495,
+      "median_labels": 1.0,
+      "max_labels": 8
+    },
+    "Validation": {
+      "clips": 12470,
+      "mean_labels": 1.6156375300721733,
+      "median_labels": 1.0,
+      "max_labels": 7
+    }
+  },
+  "concurrency": {
+    "Train": {
+      "0": 18181,
+      "1": 10565,
+      "2": 8356,
+      "3+": 12619
+    },
+    "Validation": {
+      "0": 4323,
+      "1": 2321,
+      "2": 2235,
+      "3+": 3591
+    }
+  },
+  "top_classes": [
+    {
+      "label": "SPHSUR",
+      "count": 13258
+    },
+    {
+      "label": "BOABIS",
+      "count": 10888
+    },
+    {
+      "label": "BOAFAB",
+      "count": 6438
+    },
+    {
+      "label": "DENMIN",
+      "count": 6070
+    },
+    {
+      "label": "LEPPOD",
+      "count": 6032
+    },
+    {
+      "label": "PHYALB",
+      "count": 5374
+    },
+    {
+      "label": "LEPLAT",
+      "count": 5244
+    },
+    {
+      "label": "PITAZU",
+      "count": 4873
+    },
+    {
+      "label": "PHYCUV",
+      "count": 4240
+    },
+    {
+      "label": "DENNAN",
+      "count": 3801
+    }
+  ],
+  "top_pairs": [
+    {
+      "pair": "SPHSUR + BOABIS",
+      "count": 8582
+    },
+    {
+      "pair": "SPHSUR + LEPLAT",
+      "count": 4540
+    },
+    {
+      "pair": "BOABIS + LEPLAT",
+      "count": 3891
+    },
+    {
+      "pair": "SPHSUR + BOAFAB",
+      "count": 3566
+    },
+    {
+      "pair": "SPHSUR + SCIPER",
+      "count": 3198
+    },
+    {
+      "pair": "DENMIN + LEPPOD",
+      "count": 2602
+    },
+    {
+      "pair": "PHYALB + LEPPOD",
+      "count": 2532
+    },
+    {
+      "pair": "DENMIN + DENNAN",
+      "count": 2532
+    },
+    {
+      "pair": "BOABIS + SCIPER",
+      "count": 2346
+    },
+    {
+      "pair": "PITAZU + LEPPOD",
+      "count": 2247
+    }
+  ]
+}

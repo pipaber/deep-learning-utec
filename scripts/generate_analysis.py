@@ -290,8 +290,11 @@ def plot_concurrency(
     save_figure(figure, output_path)
 
 
-def plot_class_distribution(split_csv: Path, labels: list[str], output_path: Path) -> None:
-    split = pd.read_csv(split_csv, usecols=["split", *labels])
+def load_split_targets(split_csv: Path, labels: list[str]) -> pd.DataFrame:
+    return pd.read_csv(split_csv, usecols=["split", *labels])
+
+
+def plot_class_distribution(split: pd.DataFrame, labels: list[str], output_path: Path) -> None:
     train = split.loc[split["split"] == "train", labels].sum(axis=0)
     validation = split.loc[split["split"] == "val", labels].sum(axis=0)
     order = (train + validation).sort_values().index
@@ -320,6 +323,129 @@ def plot_class_distribution(split_csv: Path, labels: list[str], output_path: Pat
     )
     axis.grid(axis="x", alpha=0.25)
     axis.legend()
+    save_figure(figure, output_path)
+
+
+def build_eda_summary(split: pd.DataFrame, labels: list[str]) -> dict[str, Any]:
+    targets = split[labels].to_numpy(dtype=np.int32)
+    label_counts = targets.sum(axis=1)
+    concurrency: dict[str, dict[str, int]] = {}
+    split_statistics: dict[str, dict[str, float | int]] = {}
+    for split_value, display_name in (("train", "Train"), ("val", "Validation")):
+        mask = split["split"].to_numpy() == split_value
+        counts = label_counts[mask]
+        concurrency[display_name] = {
+            "0": int(np.count_nonzero(counts == 0)),
+            "1": int(np.count_nonzero(counts == 1)),
+            "2": int(np.count_nonzero(counts == 2)),
+            "3+": int(np.count_nonzero(counts >= 3)),
+        }
+        split_statistics[display_name] = {
+            "clips": int(mask.sum()),
+            "mean_labels": float(counts.mean()),
+            "median_labels": float(np.median(counts)),
+            "max_labels": int(counts.max()),
+        }
+
+    global_counts = pd.Series(targets.sum(axis=0), index=labels).nlargest(10)
+    cooccurrence = targets.T @ targets
+    upper_rows, upper_columns = np.triu_indices(len(labels), k=1)
+    pair_counts = cooccurrence[upper_rows, upper_columns]
+    top_pair_indices = np.argsort(pair_counts)[-10:][::-1]
+    top_pairs = [
+        {
+            "pair": f"{labels[upper_rows[index]]} + {labels[upper_columns[index]]}",
+            "count": int(pair_counts[index]),
+        }
+        for index in top_pair_indices
+    ]
+    return {
+        "splits": split_statistics,
+        "concurrency": concurrency,
+        "top_classes": [
+            {"label": str(label), "count": int(count)}
+            for label, count in global_counts.items()
+        ],
+        "top_pairs": top_pairs,
+    }
+
+
+def plot_eda_overview(summary: dict[str, Any], output_path: Path) -> None:
+    figure, axes = plt.subplots(2, 2, figsize=(15, 8.5), constrained_layout=True)
+
+    concurrency = summary["concurrency"]
+    categories = list(CONCURRENCY_ORDER)
+    positions = np.arange(len(categories))
+    width = 0.36
+    for index, (name, color) in enumerate(
+        (("Train", "#5B9BD5"), ("Validation", "#70AD47"))
+    ):
+        values = [concurrency[name][category] for category in categories]
+        bars = axes[0, 0].bar(
+            positions + (index - 0.5) * width,
+            values,
+            width,
+            label=name,
+            color=color,
+        )
+        axes[0, 0].bar_label(bars, labels=[f"{value:,}" for value in values], fontsize=8)
+    axes[0, 0].set(
+        title="Polifonía por split",
+        xlabel="Etiquetas positivas por clip",
+        ylabel="Clips",
+        xticks=positions,
+        xticklabels=categories,
+    )
+    axes[0, 0].grid(axis="y", alpha=0.25)
+    axes[0, 0].legend()
+
+    top_classes = pd.DataFrame(summary["top_classes"]).sort_values("count")
+    axes[0, 1].barh(top_classes["label"], top_classes["count"], color="#4472C4")
+    axes[0, 1].set(title="10 especies más frecuentes", xlabel="Clips positivos")
+    axes[0, 1].grid(axis="x", alpha=0.25)
+
+    top_pairs = pd.DataFrame(summary["top_pairs"]).sort_values("count")
+    axes[1, 0].barh(top_pairs["pair"], top_pairs["count"], color="#8064A2")
+    axes[1, 0].set(title="10 coocurrencias más frecuentes", xlabel="Clips compartidos")
+    axes[1, 0].grid(axis="x", alpha=0.25)
+
+    axes[1, 1].axis("off")
+    axes[1, 1].set_title("Resumen descriptivo", pad=12)
+    columns = ("Split", "Clips", "Media", "Mediana", "Máximo")
+    rows = []
+    for name in ("Train", "Validation"):
+        statistics = summary["splits"][name]
+        rows.append(
+            (
+                name,
+                f"{statistics['clips']:,}",
+                f"{statistics['mean_labels']:.2f}",
+                f"{statistics['median_labels']:.0f}",
+                f"{statistics['max_labels']}",
+            )
+        )
+    table = axes[1, 1].table(
+        cellText=rows,
+        colLabels=columns,
+        cellLoc="center",
+        colLoc="center",
+        loc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.0, 1.8)
+    axes[1, 1].text(
+        0.5,
+        0.22,
+        "La mediana es 1, pero existen clips con hasta 8 especies.\n"
+        "El desbalance y la coocurrencia motivan aprendizaje multitarea.",
+        ha="center",
+        va="center",
+        fontsize=11,
+        transform=axes[1, 1].transAxes,
+    )
+
+    figure.suptitle("EDA del split fijo de entrenamiento y validación", fontweight="bold")
     save_figure(figure, output_path)
 
 
@@ -625,7 +751,11 @@ def main() -> None:
         output_path=output_dir / "per_class_f1.png",
     )
     plot_concurrency(pcen_metrics, logmel_metrics, output_dir / "concurrency.png")
-    plot_class_distribution(args.split_csv, labels, output_dir / "class_distribution.png")
+    split = load_split_targets(args.split_csv, labels)
+    plot_class_distribution(split, labels, output_dir / "class_distribution.png")
+    eda_summary = build_eda_summary(split, labels)
+    save_json(eda_summary, output_dir / "eda_summary.json")
+    plot_eda_overview(eda_summary, output_dir / "eda_overview.png")
 
     rankings, probabilities, targets, predictions = error_rankings(
         validation, labels, args.threshold

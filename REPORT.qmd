@@ -78,6 +78,18 @@ $$
 
 ## 2. Arquitectura y pipeline implementado
 
+La Fig. 8 del paper contrasta tres estrategias: CMLC/BR usa una CRNN
+convencional, HPS-MTL comparte el extractor CNN y separa rutas recurrentes, y
+NDDR-MTL mantiene rutas específicas con intercambio aprendido de
+características. La implementación de este trabajo adapta la arquitectura
+inferior a 42 especies.
+
+![Fig. 8 del paper: comparación de CMLC/BR, HPS-MTL y NDDR-MTL.](presentation/figures/paper/figure8_architectures.jpg)
+
+Fuente: Olcay et al. (2026), *How to analyse overlapping sounds in the marine
+environment using supervised multi-label classification*,
+[doi:10.1038/s44384-026-00060-x](https://doi.org/10.1038/s44384-026-00060-x).
+
 El siguiente diagrama muestra el `forward` real del modelo. `B` representa el
 tamaño del batch; los tensores espectrales siguen el orden `[B, canales,
 frecuencia, tiempo]`. Aunque las convoluciones se ejecutan de forma agrupada
@@ -348,6 +360,22 @@ La implementación:
    de validación.
 7. Guarda el split para reutilizarlo en todos los experimentos.
 
+### EDA del split fijo
+
+![Distribución de concurrencia, clases y pares más frecuentes, con resumen descriptivo.](results/analysis/eda_overview.png)
+
+El conjunto es simultáneamente disperso y polifónico. En entrenamiento hay
+18,181 clips sin etiquetas y 12,619 con tres o más; en validación hay 4,323 y
+3,591, respectivamente. La media es 1.48 etiquetas por clip en train y 1.62 en
+validación, con máximos de 8 y 7. Las clases más frecuentes son `SPHSUR` (13,258)
+y `BOABIS` (10,888), y ambas coocurren en 8,582 clips. Este desbalance motiva la
+BCE ponderada, mientras la coocurrencia aporta una justificación empírica para
+el intercambio de características entre tareas.
+
+La figura y `results/analysis/eda_summary.json` se generan desde
+`artifacts/split_seed42.csv` mediante `scripts/generate_analysis.py`; no contienen
+conteos introducidos manualmente.
+
 ## 7. Entrenamiento
 
 ### Parámetros de la ejecución principal
@@ -455,6 +483,14 @@ computacional y debe juzgarse mediante los resultados de validación y la
 ablación.
 
 ## 8. Ablación
+
+El diseño experimental distingue explícitamente tres sistemas:
+
+| Sistema | Papel experimental | Pregunta |
+|---------|--------------------|----------|
+| Baseline de ceros | Sanity check; no es una red neuronal | ¿Qué métricas obtiene predecir siempre ausencia? |
+| NDDR-MTL + PCEN | Modelo del paper adaptado a 42 especies | ¿Cómo funciona el método principal? |
+| NDDR-MTL + log-Mel | Ablación de la representación | ¿Qué cambia al retirar PCEN? |
 
 La ablación obligatoria mantiene constantes:
 
