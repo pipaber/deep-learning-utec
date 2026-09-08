@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 build/
 dist/
+# Reveal.js runtime required by the non-self-contained presentation.
+!PRESENTATION_files/libs/revealjs/dist/
+!PRESENTATION_files/libs/revealjs/dist/**
 wheels/
 *.egg-info/
 .pytest_cache/
