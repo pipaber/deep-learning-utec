@@ -5,11 +5,12 @@ lang: es
 format:
   revealjs:
     theme: [default, presentation/styles.scss]
-    embed-resources: true
+    embed-resources: false
     slide-number: c/t
     progress: true
     controls: true
     transition: fade
+    chalkboard: true
     background-transition: fade
     center: false
     width: 1280
